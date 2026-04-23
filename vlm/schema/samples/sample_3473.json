@@ -1,0 +1,24 @@
+{
+  "carcass_no": 3473,
+  "slaughter_ymd": "20260422",
+  "backfat_average": 20.0,
+  "multifidus_thk": 15.3,
+  "body_length": 73.5939,
+  "body_width": 34.14,
+  "body_weight": 88.0,
+  "gender": 3,
+  "grade": "1+",
+  "error_code": {
+    "pig_RightEntry": 0,
+    "AI_Backbone_error": 0,
+    "AI_BackFat_error": 0,
+    "AI_HalfBone_error": 0,
+    "AI_multifidus_error": 0,
+    "AI_Outline_error": 0
+  },
+  "backbone_slope": {
+    "has_large_slope": false,
+    "threshold": null
+  },
+  "result_image_path": null
+}

@@ -22,7 +22,7 @@
 │    "carcass_no": 3010,                                           │
 │    "backfat_average": 22,        # mm                            │
 │    "multifidus_thk": 48,         # mm                            │
-│    "body_height": 920, "body_width": 340,                        │
+│    "body_length": 73.6, "body_width": 34.1,   # cm              │
 │    "gender": 3,  "grade": "1+",                                  │
 │    "error_code": {                                               │
 │      "AI_BackFat_error": 0,                                      │

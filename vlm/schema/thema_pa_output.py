@@ -66,8 +66,8 @@ class ThemaPAOutput(BaseModel):
     # 측정값
     backfat_average: float = Field(description="평균 등지방 두께 (mm)")
     multifidus_thk: float = Field(description="뭇갈래근 두께 (mm)")
-    body_length: float = Field(description="체장 (mm)")
-    body_width: float = Field(description="체폭 (mm)")
+    body_length: float = Field(description="체장 (cm)")
+    body_width: float = Field(description="체폭 (cm)")
     body_weight: float = Field(description="도체중 (kg)")
 
     # 판정
@@ -96,7 +96,7 @@ class ThemaPAOutput(BaseModel):
             f"도체중 {self.body_weight}kg",
             f"등지방 {self.backfat_average}mm",
             f"뭇갈래근 {self.multifidus_thk}mm",
-            f"체장 {self.body_length}mm / 체폭 {self.body_width}mm",
+            f"체장 {self.body_length}cm / 체폭 {self.body_width}cm",
             f"판정 등급: {self.grade}",
         ]
         if not self.error_code.is_normal():
