@@ -1,16 +1,18 @@
 """
 thema_pa DB(tb_act_result)에서 데이터를 읽어 ThemaPAOutput JSON으로 저장.
 
-사용법:
-    python export_from_db.py                       # 최근 10건 목록 출력
-    python export_from_db.py --pigno 3473          # 단일 export
-    python export_from_db.py --all --limit 20      # 최근 N건 일괄 export
+사용법 (VLM/ 루트에서):
+    python scripts/export_from_db.py                       # 최근 10건 목록 출력
+    python scripts/export_from_db.py --pigno 3473          # 단일 export
+    python scripts/export_from_db.py --all --limit 20      # 최근 N건 일괄 export
 """
 
 import argparse
 import json
 import os
 import mysql.connector
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DB_CONFIG = {
     "host":     "127.0.0.1",
@@ -19,7 +21,7 @@ DB_CONFIG = {
     "db_name":  "ai_grade_judg_dvlp",
 }
 
-OUTPUT_DIR = "vlm/schema/samples"
+OUTPUT_DIR = os.path.join(ROOT, "vlm", "schema", "samples")
 
 
 def get_connection():
@@ -75,10 +77,7 @@ def row_to_output(row: dict) -> dict:
             "AI_multifidus_error": 0,
             "AI_Outline_error":    0,
         },
-        "backbone_slope": {
-            "has_large_slope": False,
-            "threshold": None,
-        },
+        "backbone_slope": {"has_large_slope": False, "threshold": None},
         "result_image_path": None,
     }
 
