@@ -1,0 +1,24 @@
+{
+  "carcass_no": 3010,
+  "slaughter_ymd": "20260423",
+  "backfat_average": 22.4,
+  "multifidus_thk": 48.2,
+  "body_length": 920.0,
+  "body_width": 338.5,
+  "body_weight": 87.3,
+  "gender": 3,
+  "grade": "1+",
+  "error_code": {
+    "pig_RightEntry": 0,
+    "AI_Backbone_error": 0,
+    "AI_BackFat_error": 0,
+    "AI_HalfBone_error": 0,
+    "AI_multifidus_error": 0,
+    "AI_Outline_error": 0
+  },
+  "backbone_slope": {
+    "has_large_slope": false,
+    "threshold": 0.28
+  },
+  "result_image_path": "D:/Image/20260423/AIS/jpg/20260423_PA_001_0001_1_7_ai.jpg"
+}
