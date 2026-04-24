@@ -6,7 +6,8 @@
 #   ThemaPAOutput 형식의 JSON 파일로 저장합니다.
 #   단일 도체 조회 또는 최근 N건 일괄 export를 지원합니다.
 #
-# 출력 위치: vlm/schema/samples/sample_{pigno_cnt}.json
+# 출력 위치: config.json > paths.samples_dir  (기본: vlm/schema/samples/)
+#   파일명: sample_{pigno_cnt}.json
 #
 # 동작 방법:
 #   # 최근 10건 목록만 출력 (파일 저장 없음)
@@ -18,44 +19,37 @@
 #   # 최근 N건 일괄 export
 #   python scripts/export_from_db.py --all --limit 20
 #
+# 설정 (config.json):
+#   db.host / db.user / db.password / db.name  : MySQL 접속 정보
+#   paths.samples_dir                          : 샘플 JSON 출력 디렉터리
+#
 # 전제 조건:
-#   MySQL 서버 실행 중 (127.0.0.1:3306, DB: ai_grade_judg_dvlp)
+#   - MySQL 서버 실행 중
+#   - 프로젝트 루트에 config.json 존재
 #
 # 의존성:
 #   mysql-connector-python
 # =============================================================================
-"""
-thema_pa DB(tb_act_result)에서 데이터를 읽어 ThemaPAOutput JSON으로 저장.
-
-사용법 (VLM/ 루트에서):
-    python scripts/export_from_db.py                       # 최근 10건 목록 출력
-    python scripts/export_from_db.py --pigno 3473          # 단일 export
-    python scripts/export_from_db.py --all --limit 20      # 최근 N건 일괄 export
-"""
 
 import argparse
 import json
 import os
 import mysql.connector
+import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+from vlm.config import CFG
 
-DB_CONFIG = {
-    "host":     "127.0.0.1",
-    "user":     "root",
-    "password": "tmf32277@",
-    "db_name":  "ai_grade_judg_dvlp",
-}
-
-OUTPUT_DIR = os.path.join(ROOT, "vlm", "schema", "samples")
+OUTPUT_DIR = os.path.join(ROOT, CFG.paths.samples_dir)
 
 
 def get_connection():
     return mysql.connector.connect(
-        host=DB_CONFIG["host"],
-        user=DB_CONFIG["user"],
-        password=DB_CONFIG["password"],
-        database=DB_CONFIG["db_name"],
+        host=CFG.db.host,
+        user=CFG.db.user,
+        password=CFG.db.password,
+        database=CFG.db.name,
         charset="utf8mb4",
     )
 

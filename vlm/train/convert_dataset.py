@@ -2,7 +2,7 @@
 # vlm/train/convert_dataset.py
 # -----------------------------------------------------------------------------
 # 기능:
-#   scripts/build_dataset.py 가 생성한 vlm/data/dataset.jsonl 을
+#   scripts/build_dataset.py 가 생성한 dataset.jsonl 을
 #   LLaMA-Factory가 요구하는 ShareGPT 대화 형식 JSON으로 변환합니다.
 #   각 원본 레코드에서 최대 3개의 학습 샘플을 생성합니다.
 #
@@ -23,18 +23,25 @@
 #   ]
 #
 # 동작 방법:
-#   # 전체 변환 (vlm/data/livestock_train.json 생성)
+#   # 전체 변환
 #   python vlm/train/convert_dataset.py
 #
 #   # 일부만 변환 (테스트용)
 #   python vlm/train/convert_dataset.py --limit 100
 #
-#   # 출력 경로 지정
+#   # 출력 경로 직접 지정
 #   python vlm/train/convert_dataset.py --output vlm/data/livestock_small.json
 #
+# 설정 (config.json):
+#   paths.dataset_jsonl          : 입력 JSONL 경로
+#   paths.train_json             : 출력 JSON 경로
+#   grade.backfat_range          : 등지방 두께 등급별 정상 범위 (mm)
+#   grade.weight_range           : 도체중 등급별 정상 범위 (kg)
+#
 # 전제 조건:
-#   scripts/build_dataset.py 를 먼저 실행하여 vlm/data/dataset.jsonl 생성 필요
+#   scripts/build_dataset.py 를 먼저 실행하여 dataset.jsonl 생성 필요
 #   이미지 파일이 dataset.jsonl 에 기록된 경로에 실제로 존재해야 함
+#   프로젝트 루트에 config.json 존재
 #
 # 의존성:
 #   Python 표준 라이브러리만 사용 (외부 패키지 불필요)
@@ -51,11 +58,13 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-INPUT_PATH  = ROOT / "vlm" / "data" / "dataset.jsonl"
-OUTPUT_PATH = ROOT / "vlm" / "data" / "livestock_train.json"
+from vlm.config import CFG
 
-GRADE_BACKFAT = {"1+": (17, 25), "1": (17, 28)}
-GRADE_WEIGHT  = {"1+": (83, 93), "1": (78, 98)}
+INPUT_PATH  = ROOT / CFG.paths.dataset_jsonl
+OUTPUT_PATH = ROOT / CFG.paths.train_json
+
+GRADE_BACKFAT = {k: tuple(v) for k, v in CFG.grade.backfat_range.__dict__.items()}
+GRADE_WEIGHT  = {k: tuple(v) for k, v in CFG.grade.weight_range.__dict__.items()}
 
 GENDER_MAP = {1: "암퇘지", 2: "수퇘지", 3: "거세"}
 

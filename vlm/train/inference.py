@@ -4,12 +4,12 @@
 # 기능:
 #   LLaMA-Factory로 학습된 Qwen3-VL-8B LoRA 모델을 로컬에서 실행하여
 #   한국어 판정 리포트를 생성합니다.
-#   vlm/report/generator.py(Claude API 버전)와 동일한 인터페이스를 제공하므로
-#   두 파일을 교체해서 사용할 수 있습니다.
+#   vlm/report/generator.py 와 동일한 인터페이스를 제공하므로
+#   두 파일을 교체하여 사용할 수 있습니다.
 #
-# 동작 방법:
-#   1. 첫 호출 시 Qwen3-VL-8B-Instruct 베이스 모델을 GPU에 로드
-#   2. vlm/train/output/qwen3vl-lora/ 에 LoRA 어댑터가 있으면 자동 적용
+# 동작 순서:
+#   1. 첫 호출 시 config.json > model.base_model_id 의 베이스 모델을 GPU에 로드
+#   2. config.json > paths.lora_adapter 경로에 어댑터가 있으면 자동 적용
 #      (없으면 베이스 모델로 추론)
 #   3. error_code 상태에 따라 vlm/prompt/ 템플릿 선택
 #   4. 이미지 경로가 유효하면 이미지+텍스트 멀티모달 입력으로 처리
@@ -17,8 +17,7 @@
 #   5. JSON 형식으로 응답 파싱 후 반환
 #
 # 사용 예시:
-#   import json, sys
-#   sys.path.insert(0, "C:/Users/IPC/Desktop/git/VLM")
+#   import json
 #   from vlm.schema.thema_pa_output import ThemaPAOutput
 #   from vlm.train.inference import generate_report
 #
@@ -35,9 +34,13 @@
 #     "권고": str               # 현장 조치 권고
 #   }
 #
+# 설정 (config.json):
+#   model.base_model_id  : 베이스 모델 HuggingFace ID
+#   paths.lora_adapter   : LoRA 어댑터 디렉터리 경로
+#
 # 전제 조건:
-#   학습 완료 후 vlm/train/output/qwen3vl-lora/ 디렉터리가 존재해야 함
 #   GPU 필수 (RTX 4090 권장, 최소 16GB VRAM)
+#   프로젝트 루트에 config.json 존재
 #
 # 의존성:
 #   torch, transformers, peft, pillow, qwen_vl_utils
@@ -55,9 +58,10 @@ from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 from peft import PeftModel
 
 from vlm.schema.thema_pa_output import ThemaPAOutput
+from vlm.config import CFG
 
-BASE_MODEL_ID = "Qwen/Qwen3-VL-8B-Instruct"
-ADAPTER_PATH  = str(Path(__file__).parent / "output" / "qwen3vl-lora")
+BASE_MODEL_ID = CFG.model.base_model_id
+ADAPTER_PATH  = str(Path(__file__).parent.parent.parent / CFG.paths.lora_adapter)
 PROMPT_DIR    = Path(__file__).parent.parent / "prompt"
 
 _model:     Optional[object] = None
