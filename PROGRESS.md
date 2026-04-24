@@ -126,6 +126,7 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 - 모든 모듈이 `from vlm.config import CFG` 사용
 
 #### 문서화
+- `README.md` — 프로젝트 랜딩 페이지 (배지, 빠른 시작, 아키텍처 요약, API 예제)
 - `PROGRESS.md` — 전체 진행 상황 통합 뷰
 - `ARCHITECTURE.md` — Qwen3-VL LoRA 기반 현재 구조 반영 (초안 업데이트)
 
