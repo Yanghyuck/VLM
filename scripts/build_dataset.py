@@ -6,7 +6,7 @@
 #   VLM 학습용 JSONL 데이터셋을 생성합니다.
 #   DB 레코드와 이미지 파일명의 pigno_cnt 를 기준으로 매칭합니다.
 #
-# 출력 파일: vlm/data/dataset.jsonl  (gitignore 적용됨)
+# 출력 파일: config.json > paths.dataset_jsonl  (기본: vlm/data/dataset.jsonl)
 #   각 줄 형식:
 #   {
 #     "id": "도체번호",
@@ -16,12 +16,12 @@
 #     "tasks": {
 #       "summary":  "3문장 요약 요청 프롬프트",
 #       "grade":    "등급 근거 설명 요청 프롬프트",
-#       "abnormal": "오류 분석 요청 프롬프트"  ← error_code 비정상일 때만
+#       "abnormal": "오류 분석 요청 프롬프트"  (error_code 비정상일 때만)
 #     }
 #   }
 #
 # 동작 방법:
-#   # 전체 빌드 (DB 전체 레코드 × 이미지 매칭)
+#   # 전체 빌드 (DB 전체 레코드 x 이미지 매칭)
 #   python scripts/build_dataset.py
 #
 #   # 일부만 빌드 (테스트용)
@@ -30,24 +30,19 @@
 #   # DB/이미지 매칭 통계만 출력 (빌드 없음)
 #   python scripts/build_dataset.py --stats
 #
+# 설정 (config.json):
+#   db.host / db.user / db.password / db.name  : MySQL 접속 정보
+#   paths.image_dir                            : 도체 이미지 디렉터리
+#   paths.dataset_jsonl                        : 출력 JSONL 경로
+#
 # 전제 조건:
-#   - MySQL 서버 실행 중 (127.0.0.1:3306, DB: ai_grade_judg_dvlp)
-#   - 이미지 경로: C:\Users\IPC\Desktop\git\thema_pa\images\
+#   - MySQL 서버 실행 중
 #   - 이미지 파일명 패턴: {sla_no}_ori_{datetime}_{pigno_cnt}_{type}_{cam}.jpg
+#   - 프로젝트 루트에 config.json 존재
 #
 # 의존성:
 #   mysql-connector-python, pydantic>=2.0
-"""
-thema_pa 이미지 + DB 데이터를 VLM 학습용 JSONL로 변환.
-
-출력: vlm/data/dataset.jsonl
-  각 라인: {id, image_path, metadata, summary, tasks}
-
-사용법 (VLM/ 루트에서):
-    python scripts/build_dataset.py               # 전체 빌드
-    python scripts/build_dataset.py --limit 100   # 일부만
-    python scripts/build_dataset.py --stats       # 통계만 출력
-"""
+# =============================================================================
 
 import argparse
 import json
@@ -60,16 +55,10 @@ import mysql.connector
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from vlm.schema.thema_pa_output import ThemaPAOutput
+from vlm.config import CFG
 
-IMAGE_DIR = r"C:\Users\IPC\Desktop\git\thema_pa\images"
-OUTPUT_PATH = os.path.join(ROOT, "vlm", "data", "dataset.jsonl")
-
-DB_CONFIG = {
-    "host":     "127.0.0.1",
-    "user":     "root",
-    "password": "tmf32277@",
-    "db_name":  "ai_grade_judg_dvlp",
-}
+IMAGE_DIR   = CFG.paths.image_dir
+OUTPUT_PATH = os.path.join(ROOT, CFG.paths.dataset_jsonl)
 
 FILENAME_RE = re.compile(r"^.+_ori_\d+_(\d+)_.+\.jpg$", re.IGNORECASE)
 
@@ -82,10 +71,10 @@ TASK_PROMPTS = {
 
 def get_connection():
     return mysql.connector.connect(
-        host=DB_CONFIG["host"],
-        user=DB_CONFIG["user"],
-        password=DB_CONFIG["password"],
-        database=DB_CONFIG["db_name"],
+        host=CFG.db.host,
+        user=CFG.db.user,
+        password=CFG.db.password,
+        database=CFG.db.name,
         charset="utf8mb4",
     )
 
