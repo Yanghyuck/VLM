@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -52,9 +53,10 @@ GRADE_COLOR = {"1+": "🟢", "1": "🔵", "2": "🟡", "등외": "🔴"}
 SAMPLE_DIR = ROOT / CFG.paths.samples_dir
 
 
-@st.cache_resource(show_spinner="모델 로딩 중...")
+@st.cache_resource(show_spinner="Qwen3-VL 모델 로딩 중... (최초 1회, 2~3분 소요)")
 def load_inference():
     from vlm.train import inference
+    inference._load_model()
     return inference
 
 
@@ -103,6 +105,16 @@ elif selected != "직접 입력":
 if uploaded_img:
     tmp_dir = ROOT / "vlm" / "data" / "tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1시간 이상 된 임시파일 정리
+    now = time.time()
+    for old in tmp_dir.glob("*.jpg"):
+        try:
+            if now - old.stat().st_mtime > 3600:
+                old.unlink()
+        except OSError:
+            pass
+
     tmp = tmp_dir / f"{uuid.uuid4().hex}.jpg"
     tmp.write_bytes(uploaded_img.read())
     image_path = str(tmp)

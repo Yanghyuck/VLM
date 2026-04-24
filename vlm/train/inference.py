@@ -108,18 +108,59 @@ def _select_template(output: ThemaPAOutput) -> str:
     return _load_prompt("normal_case.txt")
 
 
+def _find_balanced_json(text: str) -> str | None:
+    """텍스트에서 첫 번째 완성된 JSON 객체를 brace counting으로 추출.
+
+    중첩 객체({"a": {"b": 1}})도 정확히 매칭. 코드블록이 있으면 우선 처리.
+    """
+    # 코드블록 제거
+    fence = re.search(r"```(?:json)?\s*", text)
+    if fence:
+        text = text[fence.end():]
+
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
 def _extract_json(text: str) -> dict:
     text = text.strip()
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if m:
+
+    candidate = _find_balanced_json(text)
+    if candidate:
         try:
-            return json.loads(m.group(1))
+            return json.loads(candidate)
         except json.JSONDecodeError:
             pass
+
     # JSON 파싱 실패 시 텍스트를 요약 필드에 담아 반환
     return {
         "3문장_요약": text[:300],
