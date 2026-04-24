@@ -1,7 +1,8 @@
-# 한국어 축산 AI 판정 코파일럿 — 포트폴리오 아키텍처 초안
+# 한국어 축산 AI 판정 코파일럿 — 아키텍처
 
-> 작성일: 2026-04-23  
+> 최종 업데이트: 2026-04-24
 > 기반 코드: `thema_pa` (YOLOv11 기반 돼지 도체 분석 시스템)
+> 메인 엔진: **Qwen3-VL-8B-Instruct + LoRA 파인튜닝** (로컬 추론)
 
 ---
 
@@ -17,23 +18,16 @@
 │                         thema_pa (기존)                          │
 │  YOLOv11 seg → PostProcess → GradeCalc → DB / REST / MQTT       │
 │                                                                  │
-│  출력 JSON 예시:                                                  │
+│  출력 JSON 예시 (ThemaPAOutput):                                 │
 │  {                                                               │
 │    "carcass_no": 3010,                                           │
 │    "backfat_average": 22,        # mm                            │
 │    "multifidus_thk": 48,         # mm                            │
 │    "body_length": 73.6, "body_width": 34.1,   # cm              │
 │    "gender": 3,  "grade": "1+",                                  │
-│    "error_code": {                                               │
-│      "AI_BackFat_error": 0,                                      │
-│      "AI_Backbone_error": 0,                                     │
-│      "AI_HalfBone_error": 0,                                     │
-│      "AI_multifidus_error": 0,                                   │
-│      "AI_Outline_error": 0,                                      │
-│      "pig_RightEntry": 0                                         │
-│    },                                                            │
+│    "error_code": { "AI_BackFat_error": 0, ... },                 │
 │    "backbone_slope": {"has_large_slope": false, ...},            │
-│    "result_image_path": "D:/Image/20260423/AIS/jpg/xxx_ai.jpg"   │
+│    "result_image_path": "..."                                    │
 │  }                                                               │
 └──────────────────────────────┬──────────────────────────────────┘
                                │ structured JSON + result image
@@ -42,241 +36,392 @@
 ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────────┐
 │  PROJECT 1      │  │  PROJECT 3      │  │  PROJECT 2           │
 │  QA Copilot     │  │  Multimodal API │  │  VLM Benchmark       │
-│  (Explainability│  │  (Prod-ready)   │  │  (Research)          │
+│  Streamlit UI   │  │  FastAPI /v1    │  │  LoRA vs Base        │
 └────────┬────────┘  └────────┬────────┘  └──────────┬───────────┘
          │                    │                       │
          └────────────────────┴───────────────────────┘
                                │
-                        ▼ 공통 출력
-              한국어 판정 리포트 / 대시보드
+                               ▼
+                   ┌────────────────────────┐
+                   │ vlm/train/inference.py │
+                   │ Qwen3-VL-8B + LoRA     │
+                   └────────────────────────┘
 ```
+
+**중요한 설계 결정 (2026-04-24 전환)**:
+초기에는 Claude API 기반으로 설계했으나, API 비용 및 네트워크 의존성 제거를 위해
+**로컬 Qwen3-VL LoRA 파인튜닝**으로 전환. 세 프로젝트 모두 `vlm/train/inference.py` 를 공유합니다.
 
 ---
 
-## 2. Project 1 — Explainable Livestock QA Copilot
+## 2. 공통 레이어 (세 프로젝트 공유)
 
-### 목표
-thema_pa의 구조화 JSON과 결과 이미지를 입력받아,  
-**현장 작업자가 이해할 수 있는 한국어 판정 요약과 원인 분석**을 자동 생성한다.
+### 2.1 스키마 — `vlm/schema/thema_pa_output.py`
 
-### 핵심 입출력
+thema_pa JSON을 Pydantic v2 모델로 정의. 세 프로젝트가 모두 import.
 
+```python
+class ThemaPAOutput(BaseModel):
+    carcass_no: int
+    slaughter_ymd: str
+    backfat_average: float      # mm
+    multifidus_thk: float       # mm
+    body_length: float          # cm
+    body_width: float           # cm
+    body_weight: float          # kg
+    gender: Gender              # 1=암, 2=수, 3=거세
+    grade: str                  # '1+', '1', '2', '등외'
+    error_code: ErrorCode       # 6개 AI 검출 플래그
+    backbone_slope: BackboneSlope
+    result_image_path: Optional[str]
 ```
-입력: thema_pa JSON + result_image (optional)
-출력: {
-  "3문장_요약": "이 개체(도체번호 3010)는 거세 수컷이며 등지방 22mm, 뭇갈래근 48mm로 측정되어 1+등급으로 판정되었습니다. ...",
-  "비정상_근거": null,   # error가 있을 때만 채움
-  "주의사항": ["체폭/체장 측정 정상", "척추 기울기 정상"],
-  "권고": "등지방 두께가 기준 범위 내에 있으나 상단에 근접합니다. 다음 개체 확인 권장."
+
+### 2.2 중앙 설정 — `config.json` + `vlm/config.py`
+
+모든 환경 변동값(DB 비밀번호, 경로, 모델 ID, 포트 등)을 `config.json` 한 곳에 집중.
+`vlm/config.py` 가 로드해 `CFG` 객체로 제공.
+
+```python
+from vlm.config import CFG
+CFG.db.host                  # MySQL 접속
+CFG.paths.lora_adapter       # LoRA 어댑터 경로
+CFG.model.base_model_id      # Qwen/Qwen3-VL-8B-Instruct
+CFG.api.allowed_origins      # CORS 화이트리스트
+CFG.grade.backfat_range      # 등급별 정상 범위
+```
+
+`config.json` 은 `.gitignore` 로 제외되며 실제 값은 `config.example.json` 을 복사해 생성.
+
+### 2.3 로컬 추론 — `vlm/train/inference.py`
+
+세 프로젝트가 공유하는 추론 진입점.
+
+```python
+def generate_report(output: ThemaPAOutput) -> dict:
+    """ThemaPAOutput → 한국어 판정 리포트 dict."""
+    # 1. 모델 lazy load (첫 호출 시)
+    # 2. error_code 에 따라 프롬프트 템플릿 선택
+    # 3. 이미지 있으면 멀티모달, 없으면 텍스트만
+    # 4. Qwen3-VL 생성 → JSON 파싱 (brace-balanced parser)
+    # 5. dict 반환
+```
+
+반환 형식:
+```json
+{
+  "3문장_요약": "도체번호 3010은 거세 수컷으로 ...",
+  "비정상_근거": null,
+  "주의사항": ["체폭/체장 정상", "척추 기울기 정상"],
+  "권고": "등지방 기준 범위 상단 근접. 다음 개체 주의 관찰."
 }
 ```
 
-### 컴포넌트
+### 2.4 프롬프트 템플릿 — `vlm/prompt/`
 
-```
-vlm/
-├── schema/
-│   └── thema_pa_output.py      # thema_pa JSON → Pydantic 모델
-├── prompt/
-│   ├── system_prompt.txt       # 도메인 지식 + 출력 형식 정의
-│   ├── normal_case.txt         # 정상 판정 템플릿
-│   ├── error_case.txt          # error_code 비정상 시 템플릿
-│   └── failure_analysis.txt    # 등지방 추정 실패 원인 분석
-├── report/
-│   └── generator.py            # LLM 호출 → 리포트 생성
-└── demo/
-    └── app.py                  # Streamlit 3단 데모
-                                # [원본 이미지 | 시각화 | 한국어 리포트]
-```
-
-### 프롬프트 설계 원칙
-
-| error_code 상태 | 분기 프롬프트 | 생성 내용 |
-|---|---|---|
-| 모두 0 | normal_case | 정상 판정 요약 + 등급 근거 |
-| AI_BackFat_error=1 | failure_analysis | 등지방 추정 실패 원인 + 재촬영 권고 |
-| pig_RightEntry=1 | failure_analysis | 비정상 진입 감지 + 자세 보정 권고 |
-| 그 외 error_code 비정상 | error_case | 해당 부위 측정 불가 원인 설명 |
-
-### 4주차 마일스톤
-
-- 1주차: thema_pa JSON 스키마 Pydantic으로 확정, 샘플 10건 수집
-- 2주차: 프롬프트 3종 작성 + Claude API 연동, 리포트 생성기 구현
-- 3주차: Streamlit 데모 (3단 레이아웃)
-- 4주차: 실패 케이스 10건 이상 수동 검증 + 사례 문서화
+| 템플릿 | 사용 조건 |
+|---|---|
+| `system_prompt.txt` | 항상 system 메시지로 포함 (도메인 지식) |
+| `normal_case.txt` | `error_code` 모두 0 |
+| `failure_analysis.txt` | `pig_RightEntry=1` 또는 `AI_BackFat_error=1` |
+| `error_case.txt` | 그 외 error_code 비정상 |
 
 ---
 
-## 3. Project 2 — Korean Livestock VLM Benchmark (LivestockVLM-Ko-Bench)
+## 3. Project 1 — Explainable Livestock QA Copilot
 
 ### 목표
-thema_pa 출력과 현장 이미지를 이용해  
-**도메인 특화 한국어 VLM 평가셋**을 정의하고, 재현 가능한 벤치마크로 만든다.
+thema_pa의 구조화 JSON과 결과 이미지를 입력받아,
+**현장 작업자가 이해할 수 있는 한국어 판정 요약과 원인 분석**을 자동 생성.
+
+### 구현
+
+```
+vlm/demo/app.py — Streamlit 3패널 데모
+  ┌─────────────────┬──────────────────────┬─────────────────┐
+  │ 왼쪽            │ 가운데               │ 오른쪽          │
+  │ - 도체 이미지   │ - 3문장 요약         │ - 등급 배지     │
+  │ - JSON 업로드   │ - 비정상 근거        │ - 측정값 테이블 │
+  │ - 샘플 선택     │ - 주의사항 리스트    │ - AI 검출 상태  │
+  │                 │ - 권고               │                 │
+  └─────────────────┴──────────────────────┴─────────────────┘
+```
+
+### 파일 구성
+
+```
+vlm/
+├── schema/thema_pa_output.py    # 공통 Pydantic
+├── prompt/*.txt                 # 4개 템플릿
+├── train/inference.py           # Qwen3-VL LoRA 추론
+├── demo/app.py                  # Streamlit 데모
+└── report/generator.py          # inference.py 위임 shim (하위 호환)
+```
+
+### 사용자 흐름
+
+1. 사이드바에서 샘플 JSON 선택 또는 업로드
+2. (옵션) 이미지 업로드 → `vlm/data/tmp/{uuid}.jpg` 로 저장 (1시간 TTL)
+3. "판정 실행" 버튼 → `inference.generate_report()` 호출
+4. 3패널에 결과 표시
+
+---
+
+## 4. Project 2 — Korean Livestock VLM Benchmark (4주차 예정)
+
+### 목표
+thema_pa 수치를 ground truth 로 삼아 **LoRA 파인튜닝 모델 vs 베이스 모델**을
+50~100건에 대해 비교 측정. 한국어 축산 VLM 최초 벤치마크.
 
 ### 평가 태스크 3종
 
 ```
-Task A — 이미지 기반 한국어 설명 (Image Captioning)
-  입력: result_image (시각화된 등지방/윤곽선 overlay)
-  정답: thema_pa가 계산한 수치 기반 레퍼런스 설명
-  지표: ROUGE-L, BERTScore (한국어)
+Task A — 이미지 기반 한국어 설명 (Captioning)
+  지표: ROUGE-L, BERTScore (ko)
 
 Task B — 진단 Reasoning (Chain-of-Thought QA)
-  입력: JSON 수치 + 이미지
-  질문: "이 개체가 2등급으로 판정된 이유를 단계적으로 설명하세요"
-  평가: 수동 루브릭 (5점 척도 × 3기준: 정확성·완결성·현장 가독성)
+  평가: 수동 루브릭 (5점 × 정확성 · 완결성 · 현장 가독성)
 
 Task C — 실패 케이스 해설 (Error Analysis)
-  입력: error_code 비정상 + 실패 이미지
-  질문: "등지방 추정에 실패한 원인과 현장 조치 방법을 설명하세요"
-  평가: 원인 식별 정확도 (thema_pa 에러 코드 기준)
+  지표: error_code 기반 원인 식별 정확도
 ```
 
-### 데이터셋 구조
+### 예상 구조
 
 ```
-benchmark/
-├── samples/
-│   ├── normal/          # error_code 모두 0                  (30건)
-│   ├── backfat_fail/    # AI_BackFat_error=1               (15건)
-│   ├── outline_fail/    # AI_Outline_error=1               (10건)
-│   └── entry_fail/      # pig_RightEntry=1                 (10건)
-├── annotations/
-│   └── {sample_id}.json # 수동 검증 레퍼런스 답변
-├── eval/
-│   └── scorer.py        # ROUGE / BERTScore / 수동 루브릭 집계
-└── report/
-    └── auto_report.py   # 모델별 점수표 + 실패 케이스 시각화
+vlm/bench/
+├── dataset/                   # 평가용 샘플 (train 제외)
+│   ├── normal/                # error_code 모두 0 (30건)
+│   ├── backfat_fail/          # AI_BackFat_error=1 (15건)
+│   ├── outline_fail/          # AI_Outline_error=1 (10건)
+│   └── entry_fail/            # pig_RightEntry=1 (10건)
+├── annotations/               # 수동 검증 레퍼런스
+├── runner.py                  # 베이스 vs LoRA 비교 실행
+└── scorer.py                  # ROUGE / BERTScore / 수동 루브릭 집계
 ```
-
-### 벤치마크 설계 포인트 (포트폴리오 메시지)
-
-> "도메인 특화 한국어 VLM 평가셋을 정의하고,  
-> 기존 산업 CV 결과와 결합해 모델 성능을 재현 가능하게 측정했다."
-
-- thema_pa 수치가 **ground truth** 역할 → 레이블 비용 Zero
-- 실패 케이스 분류가 이미 error_code로 구조화되어 있어 태스크 C 자동 구성 가능
-- GPT-4o / Claude / Gemini 비교 결과를 표로 제시
 
 ---
 
-## 4. Project 3 — Factory-Ready Multimodal Inspection API
+## 5. Project 3 — Multimodal Inspection API
 
 ### 목표
-thema_pa의 기존 REST/MQTT/DB 흐름 위에 VLM 설명 레이어를 추가하여  
-**이미지 업로드 → CV 추론 → VLM 설명 → REST 응답 + 대시보드 게시**를  
-end-to-end로 보여주는 운영용 데모를 구성한다.
+Qwen3-VL LoRA 추론을 **FastAPI REST 엔드포인트**로 서빙.
+thema_pa 기존 REST/MQTT 흐름에 VLM 설명 레이어 추가.
 
-### 시스템 흐름
-
-```
-[카메라 클라이언트]
-        │  POST /analyze  (multipart: image + rfid)
-        ▼
-[FastAPI Gateway]  ← comm/rest_api.py 확장
-        │
-        ├─→ [thema_pa.analysis_pa()]  ← 기존 CV 파이프라인
-        │         │ structured JSON
-        │         ▼
-        ├─→ [VLM Report Generator]   ← Project 1 report/generator.py
-        │         │ 한국어 리포트
-        │         ▼
-        ├─→ [DB INSERT]              ← storage/db.py (기존)
-        │
-        ├─→ [MQTT publish]           ← infra/monitor_publisher.py (기존)
-        │     topic: thematec/{site}/report  (신규 토픽)
-        │
-        └─→ HTTP Response:
-              {
-                "carcass_no": 3010,
-                "grade": "1+",
-                "backfat_average": 22,
-                "report_ko": "...",    ← 신규
-                "result_image_url": "..."
-              }
-```
-
-### 신규 추가 파일
+### 엔드포인트
 
 ```
-vlm/
-└── api/
-    ├── main.py          # FastAPI 엔트리포인트
-    ├── router.py        # POST /analyze, GET /report/{carcass_no}
-    └── middleware.py    # 요청 로깅 + 에러 핸들링
+GET  /v1/health
+  응답: { "status": "ready"|"loading", "model_used": "lora"|"base" }
+
+POST /v1/report
+  요청: ThemaPAOutput 호환 JSON
+  응답: {
+    "summary": "3문장 요약",
+    "grade_reason": "비정상 근거 (optional)",
+    "warnings": ["주의사항1", ...],
+    "recommendation": "권고",
+    "model_used": "lora (3.2s)"
+  }
+
+GET  /docs  — Swagger UI 자동 생성
 ```
 
-### 데모 시나리오
+### 보안 & 안정성 장치
 
-1. `virtual_cam_client.py` (기존) → 이미지 전송
-2. FastAPI가 thema_pa + VLM 순서로 처리
-3. Streamlit 대시보드에서 실시간 결과 확인
-4. MQTT 구독 클라이언트가 한국어 리포트 수신
+| 항목 | 구현 |
+|---|---|
+| 이벤트 루프 블로킹 방지 | `asyncio.run_in_executor` 로 추론 위임 |
+| 추론 타임아웃 | `asyncio.wait_for(timeout=180)` (config 가변) |
+| 경로 traversal 차단 | `result_image_path` 를 `CFG.paths.image_dir` 하위로 제한 |
+| CORS 제한 | `CFG.api.allowed_origins` 화이트리스트 |
+| 모델 로드 상태 표시 | `_model_ready` 플래그 → `/v1/health` 반영 |
+
+### 파일 구성
+
+```
+vlm/api/
+├── __init__.py
+├── schemas.py     # ReportRequest / ReportResponse Pydantic
+└── server.py      # FastAPI 앱 + lifespan + 엔드포인트
+```
+
+### 실행
+
+```bash
+python vlm/api/server.py           # config.json 의 host/port 사용
+uvicorn vlm.api.server:app --reload
+```
 
 ---
 
-## 5. 세 프로젝트 연결 구조 (포트폴리오 뷰)
+## 6. 학습 파이프라인
+
+### 데이터 흐름
+
+```
+thema_pa MySQL DB (tb_act_result)
+        │
+        ├── pigno_cnt (도체번호)
+        ├── act_backfat_thk, act_centhk, ...
+        └── act_grade
+                   │
+                   ▼
+scripts/build_dataset.py
+  - DB 조회 (grade IS NOT NULL)
+  - 이미지 디렉터리 스캔 (pigno_cnt 매칭)
+  - ThemaPAOutput 생성 + 태스크 프롬프트 할당
+                   │
+                   ▼
+vlm/data/dataset.jsonl  (원본 1건 = 1 JSON 라인)
+                   │
+                   ▼
+vlm/train/convert_dataset.py
+  - summary (모든 레코드)
+  - grade (모든 레코드)
+  - abnormal (error_code 비정상만)
+  → 원본 1건 → 최대 3개 학습 샘플
+                   │
+                   ▼
+vlm/data/livestock_train.json  (ShareGPT 포맷, 6,710 샘플)
+                   │
+                   ▼
+LLaMA-Factory 학습 (qwen3vl_lora.yaml)
+  - rank=64, α=128, bf16
+  - per_device_train_batch_size=1, grad_accum=16
+  - image_max_pixels=200,704 (448×448)
+  - num_train_epochs=3 → 1,134 optimizer steps
+                   │
+                   ▼
+vlm/train/output/qwen3vl-lora/  (LoRA 어댑터)
+```
+
+### 학습 실행
+
+```bash
+# 1. DB → JSONL
+python scripts/build_dataset.py
+
+# 2. JSONL → ShareGPT JSON
+python vlm/train/convert_dataset.py
+cp vlm/data/livestock_train.json C:/Users/IPC/Desktop/git/LLaMA-Factory/data/
+
+# 3. LoRA 학습
+llamafactory-cli train vlm/train/qwen3vl_lora.yaml
+```
+
+### 성능 최적화 이력
+
+| 이슈 | 조치 | 결과 |
+|---|---|---|
+| 초기 속도 254s/step (79시간 예상) | `image_max_pixels` 1003520 → 200704 | 38s/step (12시간) |
+| CP949 인코딩 에러 (`✓`, `→`, `—`) | 학습 문자열 ASCII 화 | 에러 해소 |
+| Windows 멀티프로세싱 느림 | `dataloader_num_workers=0` | 안정화 |
+
+---
+
+## 7. 테스트 전략
+
+**4개 파일, 23개 테스트, 모두 통과 (2026-04-24 기준)**
+
+```
+tests/
+├── test_schema.py          # ThemaPAOutput 유효성 (5)
+├── test_api_schemas.py     # ReportRequest/Response (7)
+├── test_config.py          # config.py 로더 (3)
+└── test_json_extraction.py # brace-balanced JSON parser (8)
+```
+
+```bash
+pytest tests/
+```
+
+`pytest.ini` 에 `markers=integration` 등록 — 통합 테스트는 기본 실행에서 제외.
+
+---
+
+## 8. 기술 스택
+
+| 레이어 | 선택 | 이유 |
+|---|---|---|
+| VLM | **Qwen3-VL-8B-Instruct** + LoRA | 한국어 성능, RTX 4090 GPU 메모리 적합, 오픈 모델 |
+| 학습 프레임워크 | LLaMA-Factory | VLM 파인튜닝 지원, ShareGPT 포맷 호환 |
+| PEFT | LoRA (rank=64, α=128) | 가중치 1.95%만 학습 (174M/8.9B) |
+| 데모 UI | Streamlit | 빠른 3패널 레이아웃, `@st.cache_resource` |
+| API 서버 | FastAPI + Uvicorn | 비동기 지원, Swagger 자동, Pydantic 통합 |
+| 스키마 | Pydantic v2 | thema_pa JSON → 타입 안전 |
+| DB | MySQL 8.x (`ai_grade_judg_dvlp`) | thema_pa 기존 DB 재사용 |
+| 평가 | ROUGE-L + BERTScore (ko) | 한국어 NLG 표준 지표 |
+| 테스트 | pytest | testpaths, markers |
+| 설정 | JSON + SimpleNamespace 로더 | 외부 의존성 없음 |
+
+---
+
+## 9. 브랜치 전략
+
+| 브랜치 | 역할 |
+|---|---|
+| `main` | 1주차 결과 (스키마 + DB/이미지 매칭) |
+| `claude` | 2주차 Claude API 버전 (포기된 경로, 참고용) |
+| `local-vlm-train` | **메인 개발 브랜치** — 2주차 + 3주차 + 로컬 Qwen3-VL LoRA |
+
+---
+
+## 10. 세 프로젝트 연결 구조
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  PORTFOLIO STORY                                             │
 │                                                              │
-│  thema_pa ──────────────────────────────────────────────┐   │
-│  (기존 산업 AI)                                          │   │
-│                                                          │   │
-│  Project 1: QA Copilot                                   │   │
-│  → "기존 모델을 바꾸지 않고 한국어 설명 레이어 추가"    │   │
-│  → 사업적 가치: 현장 작업자 교육비 절감, QA 자동화      │   │
-│                                                          │   │
-│  Project 2: VLM Benchmark                                │   │
-│  → "도메인 특화 평가셋 설계 + 재현 가능한 측정"         │   │
-│  → 연구적 가치: 한국어 축산 VLM 최초 벤치마크           │   │
-│                                                          │   │
-│  Project 3: Multimodal API                               │   │
-│  → "CV + VLM + REST + MQTT end-to-end 통합 데모"        │   │
-│  → 운영 가치: 실제 공장 시스템과 동일한 통신 구조       │◄──┘
+│  thema_pa (기존 산업 AI)                                     │
+│      │                                                        │
+│      ├──► Project 1: QA Copilot                              │
+│      │    "기존 모델을 바꾸지 않고 한국어 설명 레이어 추가"  │
+│      │    → 현장 작업자 교육비 절감, QA 자동화               │
+│      │                                                        │
+│      ├──► Project 2: VLM Benchmark                           │
+│      │    "도메인 특화 한국어 VLM 평가셋 + LoRA vs Base"     │
+│      │    → 파인튜닝 효과 정량화, 재현 가능한 측정           │
+│      │                                                        │
+│      └──► Project 3: Multimodal API                          │
+│           "로컬 VLM + FastAPI end-to-end 서빙"               │
+│           → API 비용 Zero, 운영 자립 가능                    │
+│                                                              │
+│  공유 컴포넌트:                                              │
+│    vlm/schema/thema_pa_output.py  ← 세 프로젝트 import       │
+│    vlm/train/inference.py         ← 세 프로젝트 추론 엔진    │
+│    vlm/prompt/*.txt               ← 템플릿 공유              │
+│    config.json + vlm/config.py    ← 설정 중앙화              │
 └──────────────────────────────────────────────────────────────┘
-
-공유 컴포넌트:
-  vlm/schema/thema_pa_output.py  ← 세 프로젝트 모두 import
-  vlm/report/generator.py        ← Project 1, 3 공유
-  benchmark/samples/             ← Project 2, (Project 1 검증용)
 ```
 
 ---
 
-## 6. 기술 스택 결정
+## 11. 주차별 실제 진행 상황
 
-| 레이어 | 선택 | 이유 |
-|---|---|---|
-| LLM/VLM | Claude claude-sonnet-4-6 | 한국어 품질, API 안정성 |
-| 데모 UI | Streamlit | 빠른 프로토타이핑, 3단 레이아웃 |
-| API 서버 | FastAPI | thema_pa와 동일 파이썬 생태계 |
-| 스키마 | Pydantic v2 | thema_pa JSON → 타입 안전 변환 |
-| 평가 | ROUGE-L + BERTScore (ko) | 한국어 NLG 표준 지표 |
-| 메시징 | MQTT (HiveMQ, 기존) | infra/monitor_publisher.py 재활용 |
+### 1주차 — 기반 구축 ✅
+- [x] `vlm/schema/thema_pa_output.py` Pydantic 모델
+- [x] thema_pa 샘플 JSON 수집 (`vlm/schema/samples/`)
+- [x] DB → 샘플 export (`scripts/export_from_db.py`)
+- [x] DB + 이미지 매칭 빌드 (`scripts/build_dataset.py`)
 
----
+### 2주차 — LoRA 학습 파이프라인 ✅
+- [x] 프롬프트 템플릿 4종
+- [x] ShareGPT 변환기 (`vlm/train/convert_dataset.py`)
+- [x] LoRA 학습 설정 (`vlm/train/qwen3vl_lora.yaml`)
+- [x] 로컬 추론 엔진 (`vlm/train/inference.py`)
+- [ ] LoRA 학습 완료 (2026-04-24 23:30 경 예정)
 
-## 7. 주차별 실행 계획
+### 3주차 — 데모 & API & 중앙 설정 ✅
+- [x] Streamlit 3패널 데모 (`vlm/demo/app.py`)
+- [x] FastAPI 서버 (`vlm/api/schemas.py`, `server.py`)
+- [x] `config.json` 중앙 설정 + `vlm/config.py` 로더
+- [x] 보안 강화 (git 히스토리 비밀번호 제거, CORS, 경로 검증, 타임아웃)
+- [x] 테스트 23개 추가
+- [ ] 학습 완료 모델로 데모/API 실제 동작 확인
 
-### 1주차 — 기반 구축
-- [ ] `vlm/schema/thema_pa_output.py` Pydantic 모델 작성
-- [ ] thema_pa 샘플 JSON 10건 + 결과 이미지 수집
-- [ ] 정상/실패 케이스 분류 기준 문서화
-
-### 2주차 — 리포트 생성기
-- [ ] `vlm/prompt/` 템플릿 3종 작성
-- [ ] `vlm/report/generator.py` Claude API 연동
-- [ ] 단위 테스트: 샘플 10건 리포트 품질 확인
-
-### 3주차 — 데모 완성
-- [ ] Streamlit 3단 데모 (`vlm/demo/app.py`)
-- [ ] FastAPI 엔드포인트 (`vlm/api/main.py`)
-- [ ] `virtual_cam_client.py` → API → 대시보드 end-to-end 테스트
-
-### 4주차 — 벤치마크 + 문서화
-- [ ] 샘플 50~100건 수집 및 수동 레퍼런스 작성
-- [ ] `benchmark/eval/scorer.py` 구현
-- [ ] 실패 케이스 10건 이상 사례 문서화
-- [ ] README + 포트폴리오 설명 페이지 작성
+### 4주차 — 벤치마크 + 문서화 ⏳
+- [ ] 평가 샘플 50~100건 수집 (train 제외)
+- [ ] 레퍼런스 답변 작성
+- [ ] `vlm/bench/scorer.py` (ROUGE / BERTScore)
+- [ ] 실패 케이스 사례 문서화
+- [ ] README + 포트폴리오 설명 페이지
