@@ -37,6 +37,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -52,21 +53,24 @@ from vlm.config import CFG
 ADAPTER_PATH = Path(__file__).parent.parent.parent / CFG.paths.lora_adapter
 
 _inference_module: Optional[object] = None
+_model_ready: bool = False
 _model_used: str = "not_loaded"
 
 
-def _load_inference():
-    global _inference_module, _model_used
-    if _inference_module is not None:
-        return
+def _load_model_sync():
+    """모델을 실제로 GPU에 올리는 동기 함수 (lifespan에서 executor로 실행)."""
+    global _inference_module, _model_ready, _model_used
     from vlm.train import inference
+    inference._load_model()
     _inference_module = inference
     _model_used = "lora" if ADAPTER_PATH.exists() else "base"
+    _model_ready = True
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _load_inference()
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _load_model_sync)
     yield
 
 
@@ -105,16 +109,16 @@ def _build_thema_output(req: ReportRequest) -> ThemaPAOutput:
 @app.get("/v1/health")
 def health():
     return {
-        "status": "ok",
+        "status": "ready" if _model_ready else "loading",
         "model_used": _model_used,
         "adapter_exists": ADAPTER_PATH.exists(),
     }
 
 
 @app.post("/v1/report", response_model=ReportResponse)
-def generate_report(req: ReportRequest):
-    if _inference_module is None:
-        raise HTTPException(status_code=503, detail="모델 로딩 중입니다. 잠시 후 재시도하세요.")
+async def generate_report(req: ReportRequest):
+    if not _model_ready:
+        raise HTTPException(status_code=503, detail="모델 로딩 중입니다. /v1/health 로 상태 확인 후 재시도하세요.")
 
     try:
         output = _build_thema_output(req)
@@ -122,7 +126,8 @@ def generate_report(req: ReportRequest):
         raise HTTPException(status_code=422, detail=f"입력 데이터 오류: {e}")
 
     t0 = time.time()
-    result = _inference_module.generate_report(output)
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _inference_module.generate_report, output)
     elapsed = round(time.time() - t0, 2)
 
     return ReportResponse(

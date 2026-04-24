@@ -1,0 +1,37 @@
+{
+  "db": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "YOUR_DB_PASSWORD",
+    "name": "ai_grade_judg_dvlp"
+  },
+  "paths": {
+    "image_dir": "C:/path/to/thema_pa/images",
+    "dataset_jsonl": "vlm/data/dataset.jsonl",
+    "train_json": "vlm/data/livestock_train.json",
+    "llamafactory_data_dir": "C:/path/to/LLaMA-Factory/data",
+    "lora_adapter": "vlm/train/output/qwen3vl-lora",
+    "samples_dir": "vlm/schema/samples"
+  },
+  "model": {
+    "base_model_id": "Qwen/Qwen3-VL-8B-Instruct",
+    "lora_rank": 64,
+    "lora_alpha": 128,
+    "image_max_pixels": 200704
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 8000
+  },
+  "grade": {
+    "backfat_range": {
+      "1+": [17, 25],
+      "1":  [17, 28]
+    },
+    "weight_range": {
+      "1+": [83, 93],
+      "1":  [78, 98]
+    }
+  }
+}

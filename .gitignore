@@ -7,3 +7,7 @@ dist/
 build/
 .venv/
 vlm/data/
+config.json
+vlm/train/train.log
+vlm/train/train_err.log
+vlm/train/output/
