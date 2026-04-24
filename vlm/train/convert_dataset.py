@@ -63,8 +63,15 @@ from vlm.config import CFG
 INPUT_PATH  = ROOT / CFG.paths.dataset_jsonl
 OUTPUT_PATH = ROOT / CFG.paths.train_json
 
-GRADE_BACKFAT = {k: tuple(v) for k, v in CFG.grade.backfat_range.__dict__.items()}
-GRADE_WEIGHT  = {k: tuple(v) for k, v in CFG.grade.weight_range.__dict__.items()}
+def _raw_config() -> dict:
+    """SimpleNamespace 내부 구조에 의존하지 않도록 config.json 을 직접 다시 읽기."""
+    with open(ROOT / "config.json", encoding="utf-8") as f:
+        return json.load(f)
+
+
+_raw_grade = _raw_config()["grade"]
+GRADE_BACKFAT = {k: tuple(v) for k, v in _raw_grade["backfat_range"].items()}
+GRADE_WEIGHT  = {k: tuple(v) for k, v in _raw_grade["weight_range"].items()}
 
 GENDER_MAP = {1: "암퇘지", 2: "수퇘지", 3: "거세"}
 

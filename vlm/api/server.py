@@ -81,15 +81,41 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = getattr(CFG.api, "allowed_origins", None) or ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=_cors_origins,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
+_INFERENCE_TIMEOUT = getattr(CFG.api, "inference_timeout_sec", 180)
+
+_IMAGE_ROOT = Path(CFG.paths.image_dir).resolve()
+
+
+def _validate_image_path(path: str | None) -> str | None:
+    """경로 traversal 방지 — 허용된 이미지 디렉터리 하위인지만 허용."""
+    if not path:
+        return None
+    try:
+        resolved = Path(path).resolve()
+    except (OSError, ValueError):
+        raise HTTPException(status_code=422, detail=f"잘못된 이미지 경로: {path}")
+    if not resolved.exists():
+        raise HTTPException(status_code=422, detail=f"이미지 파일 없음: {path}")
+    try:
+        resolved.relative_to(_IMAGE_ROOT)
+    except ValueError:
+        raise HTTPException(
+            status_code=403,
+            detail=f"허용되지 않은 경로. image_dir({_IMAGE_ROOT}) 하위만 허용됩니다.",
+        )
+    return str(resolved)
+
 
 def _build_thema_output(req: ReportRequest) -> ThemaPAOutput:
+    validated_path = _validate_image_path(req.result_image_path)
     return ThemaPAOutput(
         carcass_no=req.carcass_no,
         slaughter_ymd=req.slaughter_ymd,
@@ -102,7 +128,7 @@ def _build_thema_output(req: ReportRequest) -> ThemaPAOutput:
         grade=req.grade,
         error_code=ErrorCode(**req.error_code.model_dump()),
         backbone_slope=BackboneSlope(**req.backbone_slope.model_dump()),
-        result_image_path=req.result_image_path,
+        result_image_path=validated_path,
     )
 
 
@@ -122,12 +148,23 @@ async def generate_report(req: ReportRequest):
 
     try:
         output = _build_thema_output(req)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"입력 데이터 오류: {e}")
 
     t0 = time.time()
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _inference_module.generate_report, output)
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _inference_module.generate_report, output),
+            timeout=_INFERENCE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail=f"추론 타임아웃 ({_INFERENCE_TIMEOUT}초 초과)",
+        )
     elapsed = round(time.time() - t0, 2)
 
     return ReportResponse(
