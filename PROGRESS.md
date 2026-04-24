@@ -104,7 +104,7 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 
 ### 3주차 — 데모 & API & 설정 관리 🔄
 
-**커밋**: `7e6081a`, `790f29f`, `f435d4e`, `29116f3`
+**커밋**: `7e6081a`, `790f29f`, `f435d4e`, `29116f3`, `5cb7fa0` (PROGRESS.md), `ARCHITECTURE.md 갱신`
 
 #### FastAPI 서버 (`vlm/api/`)
 - `schemas.py` — `ReportRequest`, `ReportResponse` Pydantic 모델
@@ -124,6 +124,10 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 - `config.example.json` — 더미 값 템플릿 (git 추적)
 - `vlm/config.py` — `CFG` 로더 (SimpleNamespace)
 - 모든 모듈이 `from vlm.config import CFG` 사용
+
+#### 문서화
+- `PROGRESS.md` — 전체 진행 상황 통합 뷰
+- `ARCHITECTURE.md` — Qwen3-VL LoRA 기반 현재 구조 반영 (초안 업데이트)
 
 ---
 
