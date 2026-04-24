@@ -1,3 +1,29 @@
+# =============================================================================
+# scripts/export_from_db.py
+# -----------------------------------------------------------------------------
+# 기능:
+#   thema_pa MySQL DB(tb_act_result)에서 도체 판정 결과를 조회하여
+#   ThemaPAOutput 형식의 JSON 파일로 저장합니다.
+#   단일 도체 조회 또는 최근 N건 일괄 export를 지원합니다.
+#
+# 출력 위치: vlm/schema/samples/sample_{pigno_cnt}.json
+#
+# 동작 방법:
+#   # 최근 10건 목록만 출력 (파일 저장 없음)
+#   python scripts/export_from_db.py
+#
+#   # 특정 도체번호 단일 export
+#   python scripts/export_from_db.py --pigno 3473
+#
+#   # 최근 N건 일괄 export
+#   python scripts/export_from_db.py --all --limit 20
+#
+# 전제 조건:
+#   MySQL 서버 실행 중 (127.0.0.1:3306, DB: ai_grade_judg_dvlp)
+#
+# 의존성:
+#   mysql-connector-python
+# =============================================================================
 """
 thema_pa DB(tb_act_result)에서 데이터를 읽어 ThemaPAOutput JSON으로 저장.
 

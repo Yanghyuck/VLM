@@ -1,3 +1,42 @@
+# =============================================================================
+# scripts/build_dataset.py
+# -----------------------------------------------------------------------------
+# 기능:
+#   thema_pa MySQL DB(tb_act_result)와 도체 이미지를 결합하여
+#   VLM 학습용 JSONL 데이터셋을 생성합니다.
+#   DB 레코드와 이미지 파일명의 pigno_cnt 를 기준으로 매칭합니다.
+#
+# 출력 파일: vlm/data/dataset.jsonl  (gitignore 적용됨)
+#   각 줄 형식:
+#   {
+#     "id": "도체번호",
+#     "image_path": "절대경로/이미지.jpg",
+#     "metadata": { ThemaPAOutput 전체 필드 },
+#     "summary": "한 줄 요약 문자열",
+#     "tasks": {
+#       "summary":  "3문장 요약 요청 프롬프트",
+#       "grade":    "등급 근거 설명 요청 프롬프트",
+#       "abnormal": "오류 분석 요청 프롬프트"  ← error_code 비정상일 때만
+#     }
+#   }
+#
+# 동작 방법:
+#   # 전체 빌드 (DB 전체 레코드 × 이미지 매칭)
+#   python scripts/build_dataset.py
+#
+#   # 일부만 빌드 (테스트용)
+#   python scripts/build_dataset.py --limit 100
+#
+#   # DB/이미지 매칭 통계만 출력 (빌드 없음)
+#   python scripts/build_dataset.py --stats
+#
+# 전제 조건:
+#   - MySQL 서버 실행 중 (127.0.0.1:3306, DB: ai_grade_judg_dvlp)
+#   - 이미지 경로: C:\Users\IPC\Desktop\git\thema_pa\images\
+#   - 이미지 파일명 패턴: {sla_no}_ori_{datetime}_{pigno_cnt}_{type}_{cam}.jpg
+#
+# 의존성:
+#   mysql-connector-python, pydantic>=2.0
 """
 thema_pa 이미지 + DB 데이터를 VLM 학습용 JSONL로 변환.
 

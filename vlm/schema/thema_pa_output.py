@@ -1,3 +1,35 @@
+# =============================================================================
+# vlm/schema/thema_pa_output.py
+# -----------------------------------------------------------------------------
+# 기능:
+#   thema_pa AI 시스템이 출력하는 돼지 도체 판정 결과 JSON을
+#   Pydantic v2 모델로 정의합니다. 세 프로젝트(QA Copilot / Benchmark /
+#   Multimodal API)가 공통으로 import하는 핵심 스키마 파일입니다.
+#
+# 주요 클래스:
+#   - Gender       : 성별 열거형 (1=암, 2=수, 3=거세)
+#   - ErrorCode    : AI 검출 오류 6종 플래그 (0=정상, 1=오류)
+#                    is_normal() → 모든 플래그 0이면 True
+#                    failed_parts() → 오류 발생 부위 한국어 이름 리스트
+#   - BackboneSlope: 척추 기울기 이상 여부
+#   - ThemaPAOutput: 전체 판정 결과 (측정값 + 등급 + 오류 + 이미지 경로)
+#                    summary() → 프롬프트 주입용 한국어 한 줄 요약 반환
+#
+# 동작 방법:
+#   # DB 조회 결과 또는 JSON 파일로 인스턴스 생성
+#   import json
+#   with open("vlm/schema/samples/normal_case.json", encoding="utf-8") as f:
+#       data = json.load(f)
+#   output = ThemaPAOutput(**data)
+#
+#   print(output.grade)             # "1+"
+#   print(output.error_code.is_normal())   # True
+#   print(output.summary())         # 한 줄 요약 문자열
+#
+# 의존성:
+#   pydantic>=2.0
+# =============================================================================
+
 from __future__ import annotations
 
 from enum import IntEnum

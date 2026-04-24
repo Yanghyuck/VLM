@@ -1,0 +1,49 @@
+### 모델
+model_name_or_path: Qwen/Qwen3-VL-8B-Instruct
+
+### 학습 방법
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target: all
+
+### 데이터셋
+dataset: livestock_ko
+dataset_dir: C:/Users/IPC/Desktop/git/LLaMA-Factory/data
+template: qwen3_vl_nothink
+cutoff_len: 1024
+max_samples: 30000
+overwrite_cache: true
+preprocessing_num_workers: 1
+
+### 출력
+output_dir: vlm/train/output/qwen3vl-lora
+logging_steps: 10
+save_steps: 200
+save_total_limit: 3
+plot_loss: true
+overwrite_output_dir: true
+
+### 학습 하이퍼파라미터 (RTX 4090 24GB 기준)
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 16
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000
+dataloader_num_workers: 0
+
+### 검증
+val_size: 0.1
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 200
+
+### 이미지 설정 (Qwen3-VL) - 해상도 축소로 속도 최적화
+image_max_pixels: 200704    # 448 * 448
+video_max_pixels: 50176
