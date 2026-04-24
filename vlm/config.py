@@ -40,8 +40,17 @@ def _to_namespace(d: dict) -> SimpleNamespace:
 
 def _load() -> SimpleNamespace:
     cfg_path = Path(__file__).parent.parent / "config.json"
-    with open(cfg_path, encoding="utf-8") as f:
-        return _to_namespace(json.load(f))
+    if not cfg_path.exists():
+        raise FileNotFoundError(
+            f"config.json 없음: {cfg_path}\n"
+            "config.example.json 을 복사하여 config.json 을 생성하고 값을 채워주세요.\n"
+            "  cp config.example.json config.json"
+        )
+    try:
+        with open(cfg_path, encoding="utf-8") as f:
+            return _to_namespace(json.load(f))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"config.json 파싱 오류: {e}") from e
 
 
 CFG = _load()

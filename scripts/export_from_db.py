@@ -34,8 +34,9 @@
 import argparse
 import json
 import os
-import mysql.connector
 import sys
+
+import mysql.connector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)

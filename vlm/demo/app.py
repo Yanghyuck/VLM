@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
 from pathlib import Path
 
 import streamlit as st
@@ -100,7 +101,9 @@ elif selected != "직접 입력":
         image_path = meta["result_image_path"]
 
 if uploaded_img:
-    tmp = ROOT / "vlm" / "data" / "_uploaded_image.jpg"
+    tmp_dir = ROOT / "vlm" / "data" / "tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp = tmp_dir / f"{uuid.uuid4().hex}.jpg"
     tmp.write_bytes(uploaded_img.read())
     image_path = str(tmp)
 
@@ -122,18 +125,15 @@ with col_mid:
     st.subheader("판정 리포트")
 
     if run_btn and meta:
-        if not meta:
-            st.warning("JSON을 먼저 선택하거나 업로드하세요.")
-        else:
-            try:
-                output = _build_output(meta, image_path)
-            except Exception as e:
-                st.error(f"입력 오류: {e}")
-                st.stop()
+        try:
+            output = _build_output(meta, image_path)
+        except Exception as e:
+            st.error(f"입력 오류: {e}")
+            st.stop()
 
-            inference = load_inference()
-            with st.spinner("추론 중..."):
-                result = inference.generate_report(output)
+        inference = load_inference()
+        with st.spinner("추론 중..."):
+            result = inference.generate_report(output)
 
             st.success("판정 완료")
 

@@ -12,7 +12,7 @@ lora_target: all
 
 ### 데이터셋
 dataset: livestock_ko
-dataset_dir: C:/Users/IPC/Desktop/git/LLaMA-Factory/data
+dataset_dir: C:/Users/IPC/Desktop/git/LLaMA-Factory/data  # config.json > paths.llamafactory_data_dir 와 일치시킬 것
 template: qwen3_vl_nothink
 cutoff_len: 1024
 max_samples: 30000
