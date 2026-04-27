@@ -261,4 +261,19 @@ Swagger UI: http://localhost:8000/docs
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — 전체 아키텍처 설계
 - [PROGRESS.md](./PROGRESS.md) — 주차별 진행 이력
+- [notebooks/dataset_analysis.md](./notebooks/dataset_analysis.md) — 데이터셋 분석 리포트 (등급 분포, 측정값 통계)
 - `vlm/prompt/system_prompt.txt` — 도메인 지식 + 출력 형식 정의
+
+## 🛠️ Makefile 명령
+
+```bash
+make help           # 전체 타겟 목록
+make test           # pytest 실행
+make demo           # Streamlit 데모
+make api            # FastAPI 서버
+make analyze        # 데이터셋 분석 그림 생성
+make build-eval     # 평가셋 50건 (held-out)
+make convert        # 학습 데이터 변환 (eval 제외)
+make train-v2       # v2 학습 실행 (Vision LoRA + AI)
+make bench-all      # 베이스 + LoRA + 점수
+```
