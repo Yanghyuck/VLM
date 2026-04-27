@@ -8,7 +8,7 @@
 [![Transformers](https://img.shields.io/badge/Transformers-4.55+-ffb71b.svg)](https://huggingface.co/docs/transformers)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.33+-ff4b4b.svg)](https://streamlit.io/)
-[![Tests](https://img.shields.io/badge/tests-31%20passed-success.svg)](#테스트)
+[![Tests](https://img.shields.io/badge/tests-38%20passed-success.svg)](#테스트)
 
 ---
 
@@ -34,6 +34,27 @@
 → Vision LoRA + AI 이미지 학습으로 **베이스 대비 ROUGE +26%, BERTScore +14%** 개선.
 **모든 50건에서 v2가 Base를 초과** (단 한 건도 빠짐없음).
 상세 결과: [`vlm/bench/score_report.md`](./vlm/bench/score_report.md), [`failure_analysis.md`](./vlm/bench/failure_analysis.md), [`quantization_report.md`](./vlm/train/quantization_report.md)
+
+### 30초 어필 (포트폴리오 요약)
+
+> **문제**: 도축장 YOLO 시스템은 등급 수치만 출력 — 현장 작업자는 "왜 이 등급인지" 즉각 이해 불가
+> **접근**: Qwen3-VL-8B 를 LoRA 로 두 번 파인튜닝
+>   - v1: 텍스트만 학습 (베이스라인)
+>   - v2: Vision Tower + AI 분석 이미지까지 학습 (메인)
+> **결과**: held-out 50건 정량 평가에서 **ROUGE-L +26%, BERTScore +14%, 100% sample-wise 우월**
+> **엔지니어링**: FastAPI (auth + rate limit + JSON 로깅), Docker (GPU), GitHub Actions CI, **38 단위 테스트** 전 통과
+
+| 영역 | 산출물 |
+|---|---|
+| **데이터 파이프라인** | MySQL 3,355건 + AI 이미지 매칭 → ShareGPT 6,610 학습 샘플 |
+| **모델 학습** | LLaMA-Factory + LoRA (rank 64), v1 12.6h / v2 5.1h |
+| **벤치마크** | 50건 held-out, 3-way (Base/v1/v2), ROUGE-L+BERTScore+JSON+Grade |
+| **데모 UI** | Streamlit 3패널 (이미지/리포트/측정값) |
+| **운영 API** | FastAPI + Swagger + X-API-Key + slowapi rate limit |
+| **관측성** | JSON 구조적 로깅, X-Request-ID 분산 추적 |
+| **재현성** | Makefile, Dockerfile, docker-compose, GitHub Actions |
+| **보안** | git history 비밀번호 제거(filter-repo), 환경변수 override |
+| **양자화 평가** | INT4 NF4: VRAM -70%, 품질 trade-off 정직 분석 |
 
 ---
 
@@ -208,19 +229,35 @@ VLM/
 {
   "db":    { "host": "...", "password": "...", "name": "..." },
   "paths": { "image_dir": "...", "lora_adapter": "..." },
-  "model": { "base_model_id": "Qwen/Qwen3-VL-8B-Instruct" },
-  "api":   { "port": 8000, "allowed_origins": [...], "inference_timeout_sec": 180 },
-  "grade": { "backfat_range": {"1+": [17, 25]}, "weight_range": {...} }
+  "model": { "base_model_id": "Qwen/Qwen3-VL-8B-Instruct", "quantize": false },
+  "api":   { "port": 8000, "api_keys": [], "rate_limit_per_minute": 60 },
+  "grade": { "backfat_range": {"1+": [17, 25]}, "weight_range": {...} },
+  "logging": { "level": "INFO", "format": "json" }
 }
 ```
 
 `config.json` 은 `.gitignore` 로 제외되며, 팀 공유용 템플릿은 `config.example.json` 입니다.
 
+### 환경변수 override (운영 보안)
+
+`config.json` 에 평문으로 저장하지 않고 환경변수로 주입 가능 — 운영에서 권장:
+
+```bash
+export VLM_DB_PASSWORD="real_secret"
+export VLM_API_KEYS="prod-key-1,prod-key-2"
+export VLM_API_PORT=9000
+python vlm/api/server.py
+# [config] env overrides applied: VLM_DB_PASSWORD, VLM_API_KEYS, VLM_API_PORT
+```
+
+지원 환경변수: `VLM_DB_HOST/PORT/USER/PASSWORD/NAME`, `VLM_API_HOST/PORT/KEYS`,
+`VLM_LORA_ADAPTER`, `VLM_IMAGE_DIR`, `VLM_LOG_LEVEL/FORMAT`
+
 ---
 
 ## 🧪 테스트
 
-**단위 테스트: 31/31 통과** (2026-04-27 기준)
+**단위 테스트: 38/38 통과** (2026-04-28 기준)
 
 | 파일 | 대상 | 테스트 수 |
 |---|---|---|
@@ -230,6 +267,7 @@ VLM/
 | `tests/test_json_extraction.py` | brace-balanced JSON 파서 | 8 |
 | `tests/test_auth.py` | X-API-Key 인증 | 4 |
 | `tests/test_logging.py` | JSON 구조적 로깅 | 4 |
+| `tests/test_env_override.py` | 환경변수 config override | 7 |
 
 ```bash
 pytest tests/                # 기본 실행 (integration 제외)
@@ -321,7 +359,11 @@ Swagger UI: http://localhost:8000/docs
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — 전체 아키텍처 설계
 - [PROGRESS.md](./PROGRESS.md) — 주차별 진행 이력
+- [CHANGELOG.md](./CHANGELOG.md) — 버전별 변경 이력
 - [notebooks/dataset_analysis.md](./notebooks/dataset_analysis.md) — 데이터셋 분석 리포트 (등급 분포, 측정값 통계)
+- [vlm/bench/score_report.md](./vlm/bench/score_report.md) — 3-way 벤치마크 점수표
+- [vlm/bench/failure_analysis.md](./vlm/bench/failure_analysis.md) — 실패 케이스 정성 분석
+- [vlm/train/quantization_report.md](./vlm/train/quantization_report.md) — INT4 양자화 평가
 - `vlm/prompt/system_prompt.txt` — 도메인 지식 + 출력 형식 정의
 
 ## 🛠️ Makefile 명령

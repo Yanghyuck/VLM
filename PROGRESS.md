@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-04-27 (4주차 벤치마크 완료)
+**최종 업데이트**: 2026-04-28 (Plan C 완료 — 운영 준비도 포함)
 **현재 브랜치**: `local-vlm-train`
 **리포지토리**: https://github.com/Yanghyuck/VLM
 
@@ -287,7 +287,7 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 
 ## 테스트 현황
 
-**최종 결과: 31/31 통과** (2026-04-27 기준)
+**최종 결과: 38/38 통과** (2026-04-28 기준)
 
 | 파일 | 테스트 수 | 대상 |
 |---|---|---|
@@ -297,6 +297,7 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 | `tests/test_json_extraction.py` | 8 | `_find_balanced_json`, `_extract_json` |
 | `tests/test_auth.py` | 4 | X-API-Key 인증 (asyncio) |
 | `tests/test_logging.py` | 4 | JSON 구조적 로깅 |
+| `tests/test_env_override.py` | 7 | 환경변수 config override |
 
 **End-to-End 검증 스크립트**
 
@@ -517,7 +518,10 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] **모델 양자화 (INT4 NF4)** — VRAM 22GB → 6.75GB (-70%), 품질 trade-off 문서화
 
 ### 운영 전 필요 작업
-- [ ] DB 비밀번호 변경 (이전 노출 대응)
-- [ ] 환경변수 기반 config 로딩 추가 (`DB_PASSWORD` 등)
-- [ ] HTTPS 리버스 프록시 + rate limiting
-- [ ] 구조적 로깅 + 에러 알림
+- [ ] DB 비밀번호 변경 (이전 노출 대응 — 사용자 수동 작업)
+- [x] **환경변수 기반 config 로딩 추가** — `VLM_DB_PASSWORD`, `VLM_API_KEYS` 등 12개 변수
+- [x] **구조적 로깅** (이미 완료, JSON + request_id)
+- [x] Rate limiting (이미 완료, slowapi)
+- [ ] HTTPS 리버스 프록시 (사용자 환경 의존)
+- [ ] Sentry/PagerDuty 알림 (선택)
+- [x] **CHANGELOG.md** — 버전별 변경 이력 + 결정 이력
