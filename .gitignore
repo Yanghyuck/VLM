@@ -19,4 +19,5 @@ vlm/api/api_server.log
 vlm/api/api_test.log
 vlm/bench/runner_base.log
 vlm/bench/runner_lora.log
+vlm/bench/3way_run.log
 vlm/train/train_v2.log

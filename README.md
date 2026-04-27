@@ -22,6 +22,16 @@
 도체 이미지 + thema_pa JSON  ─►  Qwen3-VL LoRA  ─►  한국어 판정 리포트
 ```
 
+### 핵심 결과 (held-out 50건 벤치마크)
+
+| 지표 | Base | v1 (text-only) | **v2 (Vision+AI)** |
+|---|---|---|---|
+| **ROUGE-L** | 0.696 | 0.739 (+6%) | **0.876 (+26%)** ⭐ |
+| **BERTScore (ko)** | 0.842 | 0.901 (+7%) | **0.957 (+14%)** ⭐ |
+
+→ Vision LoRA + AI 이미지 학습으로 **베이스 대비 ROUGE +26%, BERTScore +14%** 개선.
+상세 결과는 [`vlm/bench/score_report.md`](./vlm/bench/score_report.md).
+
 ---
 
 ## 📸 데모 동작 검증
@@ -285,10 +295,10 @@ Swagger UI: http://localhost:8000/docs
 | 주차 | 목표 | 상태 |
 |---|---|---|
 | 1주차 | Pydantic 스키마 + 샘플 수집 | ✅ 완료 |
-| 2주차 | 프롬프트 4종 + **v1 LoRA 학습 완료** (text-only, eval_loss=0.130) | ✅ 완료 |
+| 2주차 | 프롬프트 4종 + **v1 LoRA 학습** (text-only, eval_loss=0.130) | ✅ 완료 |
 | 3주차 | Streamlit 데모 + FastAPI + 중앙 설정 + 추론 검증 | ✅ 완료 |
-| 3.5주차 | **v2 재학습** (Vision LoRA + AI 이미지 + held-out 50건) | 🔄 진행 중 |
-| 4주차 | 벤치마크 v1 vs v2 vs Base + 문서화 | ⏳ 예정 |
+| 3.5주차 | **v2 재학습** (Vision LoRA + AI 이미지, eval_loss=0.080) | ✅ 완료 |
+| 4주차 | **3-way 벤치마크** Base/v1/v2 + 결과 분석 | ✅ 완료 |
 
 상세 진행 이력은 [PROGRESS.md](./PROGRESS.md) 를 참고하세요.
 
