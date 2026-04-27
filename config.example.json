@@ -20,7 +20,9 @@
     "base_model_id": "Qwen/Qwen3-VL-8B-Instruct",
     "lora_rank": 64,
     "lora_alpha": 128,
-    "image_max_pixels": 200704
+    "image_max_pixels": 200704,
+    "quantize": false,
+    "quantize_mode": "nf4"
   },
   "api": {
     "host": "0.0.0.0",

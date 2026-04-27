@@ -28,9 +28,12 @@
 |---|---|---|---|
 | **ROUGE-L** | 0.696 | 0.739 (+6%) | **0.876 (+26%)** ⭐ |
 | **BERTScore (ko)** | 0.842 | 0.901 (+7%) | **0.957 (+14%)** ⭐ |
+| **v2 > Base 비율** | — | — | **50/50 (100%)** ⭐ |
+| **v2 worst case** | — | — | **0.786 ≥ Base max** |
 
 → Vision LoRA + AI 이미지 학습으로 **베이스 대비 ROUGE +26%, BERTScore +14%** 개선.
-상세 결과는 [`vlm/bench/score_report.md`](./vlm/bench/score_report.md).
+**모든 50건에서 v2가 Base를 초과** (단 한 건도 빠짐없음).
+상세 결과: [`vlm/bench/score_report.md`](./vlm/bench/score_report.md), [`failure_analysis.md`](./vlm/bench/failure_analysis.md), [`quantization_report.md`](./vlm/train/quantization_report.md)
 
 ---
 

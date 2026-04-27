@@ -200,11 +200,47 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 - "텍스트만 학습 vs 비전까지 학습" 의 정량적 차이를 처음 확인
 - AI 이미지의 시각 단서(등지방 영역, 측정 라인)가 모델 응답 품질에 기여
 
+### 분포 통계 (정성 분석)
+
+| 모델 | avg | median | min | max | <0.5 |
+|---|---|---|---|---|---|
+| Base | 0.696 | 0.696 | 0.476 | 0.783 | 1건 |
+| v1 LoRA | 0.739 | 0.727 | 0.615 | 0.870 | 0건 |
+| **v2 LoRA** | **0.876** | **0.833** | **0.786** | **1.000** | 0건 |
+
+> **v2 의 worst case (0.786) ≥ Base 의 max (0.783)** — 모든 분위에서 우월
+> **v2 가 Base 를 초과한 비율: 50/50 (100%)** — 모든 샘플에서 개선 ⭐
+
+### 시각화
+
+`docs/figures/`:
+- `08_benchmark_rouge_distribution.png` — 박스플롯
+- `09_benchmark_rouge_cdf.png` — 누적 분포
+- `10_benchmark_v2_vs_base_scatter.png` — 페어와이즈 산점도
+
+상세 정성 분석: [`vlm/bench/failure_analysis.md`](vlm/bench/failure_analysis.md)
+
 ### 한계 (정직한 평가)
 
 - 단일 일자(2026-04-22) 데이터로 학습/평가 → 시간적 일반화 미검증
 - 등외 케이스 부재 → error_code 처리 능력은 별도 검증 필요
 - 이미지 다양성 제한 (단일 카메라/조명/각도)
+
+---
+
+## INT4 양자화 (NF4) 평가 ⚠️
+
+| 항목 | bf16 (기본) | INT4 NF4 | 변화 |
+|---|---|---|---|
+| VRAM | ~17~22 GB | **6.75 GB** | -70% ⭐ |
+| 추론 시간 | 22~50초 | 46~112초 | +50~120% ⚠️ |
+| 정상 케이스 품질 | 우수 | 우수 | OK |
+| 오류 케이스 품질 | 우수 | **저하** (반복, 모순) | ⚠️ |
+
+**결론**: 운영 서비스에는 bf16 권장. INT4 는 엣지 디바이스 + 정상 케이스 위주에서만 사용.
+상세 분석: [`vlm/train/quantization_report.md`](vlm/train/quantization_report.md)
+
+향후 개선 후보: GPTQ / AWQ / GGUF / 작은 모델 (Qwen3-VL-2B 등)
 
 ---
 
@@ -466,7 +502,9 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] 스코어러 (`vlm/bench/scorer.py`) — N-way 비교, ROUGE-L / BERTScore (ko) / 4종 정확도
 - [x] 결과 리포트 (`vlm/bench/score_report.md`)
 - [x] 3-way 자동 실행 스크립트 (`scripts/run_3way_benchmark.py`)
-- [ ] 실패 케이스 5건 정성적 분석 (선택)
+- [x] **실패 케이스 5건 정성 분석** (`vlm/bench/failure_analysis.md`)
+- [x] **벤치마크 시각화** (3장 figures: boxplot, CDF, scatter)
+- [x] **INT4 양자화 평가** (`vlm/train/quantization_report.md`)
 
 ### 포트폴리오 완성도
 - [x] GitHub Actions CI (`pytest` 자동 실행 + 배지) — `.github/workflows/ci.yml`, Python 3.11/3.13 매트릭스
@@ -476,7 +514,7 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] **API 인증 (X-API-Key)** — `vlm/api/auth.py`, 4 테스트 통과
 - [x] **구조적 로깅 (JSON)** — `vlm/logging_config.py`, request_id/latency 자동 기록
 - [x] **Rate limiting (slowapi)** — 분당 N회 제한, 429 응답
-- [ ] 모델 양자화 (INT4) — VRAM 24GB → 6GB (Day 3)
+- [x] **모델 양자화 (INT4 NF4)** — VRAM 22GB → 6.75GB (-70%), 품질 trade-off 문서화
 
 ### 운영 전 필요 작업
 - [ ] DB 비밀번호 변경 (이전 노출 대응)

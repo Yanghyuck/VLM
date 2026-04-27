@@ -60,9 +60,28 @@ from peft import PeftModel
 from vlm.schema.thema_pa_output import ThemaPAOutput
 from vlm.config import CFG
 
-BASE_MODEL_ID = CFG.model.base_model_id
-ADAPTER_PATH  = str(Path(__file__).parent.parent.parent / CFG.paths.lora_adapter)
-PROMPT_DIR    = Path(__file__).parent.parent / "prompt"
+BASE_MODEL_ID  = CFG.model.base_model_id
+ADAPTER_PATH   = str(Path(__file__).parent.parent.parent / CFG.paths.lora_adapter)
+PROMPT_DIR     = Path(__file__).parent.parent / "prompt"
+QUANTIZE       = bool(getattr(CFG.model, "quantize", False))
+QUANTIZE_MODE  = str(getattr(CFG.model, "quantize_mode", "nf4"))
+
+
+def _build_quant_config():
+    """config.model.quantize 가 True 일 때만 BitsAndBytesConfig 반환."""
+    if not QUANTIZE:
+        return None
+    from transformers import BitsAndBytesConfig
+    if QUANTIZE_MODE == "nf4":
+        return BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+        )
+    if QUANTIZE_MODE == "int8":
+        return BitsAndBytesConfig(load_in_8bit=True)
+    raise ValueError(f"지원하지 않는 quantize_mode: {QUANTIZE_MODE}")
 
 _model:     Optional[object] = None
 _processor: Optional[object] = None
@@ -93,16 +112,21 @@ def _load_model(use_adapter: bool = True, adapter_path: str | None = None):
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    print(f"[inference] 모델 로딩: {BASE_MODEL_ID} (mode={desired_mode})")
+    quant_label = f", quantize={QUANTIZE_MODE}" if QUANTIZE else ""
+    print(f"[inference] 모델 로딩: {BASE_MODEL_ID} (mode={desired_mode}{quant_label})")
     if _processor is None:
         _processor = AutoProcessor.from_pretrained(BASE_MODEL_ID, trust_remote_code=True)
 
-    base = Qwen3VLForConditionalGeneration.from_pretrained(
-        BASE_MODEL_ID,
+    quant_config = _build_quant_config()
+    load_kwargs = dict(
         torch_dtype=torch.bfloat16,
         device_map="auto",
         trust_remote_code=True,
     )
+    if quant_config is not None:
+        load_kwargs["quantization_config"] = quant_config
+
+    base = Qwen3VLForConditionalGeneration.from_pretrained(BASE_MODEL_ID, **load_kwargs)
 
     adapter = Path(effective_path)
     if use_adapter and adapter.exists():
