@@ -360,8 +360,9 @@ curl -X POST http://localhost:8000/v1/report \
 - [~] 데모 GIF 녹화 (생략 결정)
 
 ### v2 재학습 (Vision LoRA + AI 이미지, 진행 중)
-**시작**: 2026-04-27
-**예상 완료**: 2026-04-28 (약 16~18시간)
+**시작**: 2026-04-27 10:55
+**예상 완료**: 2026-04-27 16:30 경 (실측 33s/step × 558 steps = **~5.1 시간**)
+**참고**: 초기 예상 16~18h 였으나 image_max_pixels 절반(200K→100K)으로 vision 처리 부담 감소 덕에 5h 수준
 
 핵심 변경:
 - ✅ v1 어댑터 백업 (`vlm/train/output/qwen3vl-lora-v1-textonly/`)
@@ -391,9 +392,9 @@ curl -X POST http://localhost:8000/v1/report \
 - [ ] GitHub Actions CI (`pytest` 자동 실행 + 배지)
 - [ ] Dockerfile + docker-compose
 - [ ] 모델 양자화 (INT4) — VRAM 24GB → 6GB
-- [ ] 데이터셋 분석 노트북 (등급 분포, 측정값 히스토그램)
+- [x] 데이터셋 분석 노트북 (등급 분포, 측정값 히스토그램) — `notebooks/dataset_analysis.{py,md}` + 7장 figures
 - [ ] API 인증 (`X-API-Key`)
-- [ ] Makefile
+- [x] Makefile — 공통 명령 모음
 
 ### 운영 전 필요 작업
 - [ ] DB 비밀번호 변경 (이전 노출 대응)
