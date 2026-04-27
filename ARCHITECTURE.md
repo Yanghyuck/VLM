@@ -256,66 +256,101 @@ uvicorn vlm.api.server:app --reload
 
 ## 6. 학습 파이프라인
 
+### 이미지 소스
+
+`thema_pa/images/` 하위 두 폴더:
+
+| 폴더 | 패턴 | 개수 | 용도 |
+|---|---|---|---|
+| `ORI/` | `0716_ori_{시각}_{pigno}_SP_CAM7.jpg` | 3,355 | 원본 도체 사진 |
+| `AI/` | `0716_ai_{시각}_{pigno}_{pigno+offset}_SP_CAM7.jpg` | 3,473 | AI 분석 결과 오버레이 (등지방/뭇갈래근/척추 시각화) — **v2 학습 사용** |
+
+`config.json` 의 `paths.image_dir` 가 학습 시 사용할 폴더를 결정합니다.
+
 ### 데이터 흐름
 
 ```
-thema_pa MySQL DB (tb_act_result)
-        │
-        ├── pigno_cnt (도체번호)
-        ├── act_backfat_thk, act_centhk, ...
-        └── act_grade
-                   │
-                   ▼
-scripts/build_dataset.py
-  - DB 조회 (grade IS NOT NULL)
-  - 이미지 디렉터리 스캔 (pigno_cnt 매칭)
-  - ThemaPAOutput 생성 + 태스크 프롬프트 할당
-                   │
-                   ▼
-vlm/data/dataset.jsonl  (원본 1건 = 1 JSON 라인)
-                   │
-                   ▼
-vlm/train/convert_dataset.py
-  - summary (모든 레코드)
-  - grade (모든 레코드)
-  - abnormal (error_code 비정상만)
-  → 원본 1건 → 최대 3개 학습 샘플
-                   │
-                   ▼
-vlm/data/livestock_train.json  (ShareGPT 포맷, 6,710 샘플)
-                   │
-                   ▼
-LLaMA-Factory 학습 (qwen3vl_lora.yaml)
-  - rank=64, α=128, bf16
-  - per_device_train_batch_size=1, grad_accum=16
-  - image_max_pixels=200,704 (448×448)
-  - num_train_epochs=3 → 1,134 optimizer steps
-                   │
-                   ▼
-vlm/train/output/qwen3vl-lora/  (LoRA 어댑터)
+thema_pa MySQL DB (tb_act_result)            thema_pa/images/AI/
+        │                                            │
+        ├── pigno_cnt                                │ filename:
+        ├── act_backfat_thk, act_centhk              │   0716_ai_{ts}_{pigno}_{pigno+N}_SP_CAM7.jpg
+        └── act_grade                                │
+                   │                                 │
+                   └─────────────┬───────────────────┘
+                                 │ pigno 매칭
+                                 ▼
+                   scripts/build_dataset.py
+                     - DB 조회 (grade IS NOT NULL)
+                     - 이미지 디렉터리 스캔 (FILENAME_RE_AI / RE_ORI)
+                     - ThemaPAOutput 생성 + 태스크 프롬프트 할당
+                                 │
+                                 ▼
+                   vlm/data/dataset.jsonl  (원본 1건 = 1 JSON 라인)
+                                 │
+                                 ▼
+                   vlm/bench/dataset.py (벤치마크 평가셋 50건 추출)
+                                 │
+                                 ▼
+                   vlm/bench/eval_set.jsonl  (held-out 50건)
+                                 │
+                                 ▼
+                   vlm/train/convert_dataset.py --exclude-eval-set ...
+                     - summary (모든 레코드)
+                     - grade (모든 레코드)
+                     - abnormal (error_code 비정상만)
+                     - 평가셋 도체번호는 학습에서 제외
+                                 │
+                                 ▼
+                   vlm/data/livestock_train.json  (ShareGPT, 6,610 샘플)
+                                 │
+                                 ▼
+                   LLaMA-Factory 학습 (qwen3vl_lora_v2.yaml)
+                                 │
+                                 ▼
+                   vlm/train/output/qwen3vl-lora/  (LoRA 어댑터)
 ```
+
+### 학습 버전 비교
+
+| 항목 | v1 (text-only LoRA) | **v2 (Vision LoRA + AI)** |
+|---|---|---|
+| 학습 대상 | LLM LoRA만 | **LLM + Vision Tower + Projector LoRA** |
+| 이미지 소스 | ORI | **AI** (시각 오버레이) |
+| 학습 데이터 | 6,710 (전체) | **6,610** (평가셋 50건 제외) |
+| `freeze_vision_tower` | true (default) | **false** |
+| `freeze_multi_modal_projector` | true (default) | **false** |
+| `image_max_pixels` | 200,704 | 100,352 (메모리 보전) |
+| `gradient_accumulation_steps` | 16 | 32 (effective batch 동일) |
+| 학습 시간 | 12.6h | ~16~18h |
+| 어댑터 위치 | `qwen3vl-lora-v1-textonly/` (백업) | `qwen3vl-lora/` |
+| 평가셋 노출 여부 | ⚠️ 학습 시 봤음 | ✅ held-out (한 번도 안 봄) |
 
 ### 학습 실행
 
 ```bash
-# 1. DB → JSONL
+# 1. DB → JSONL (AI 이미지 매칭)
 python scripts/build_dataset.py
 
-# 2. JSONL → ShareGPT JSON
-python vlm/train/convert_dataset.py
-cp vlm/data/livestock_train.json C:/Users/IPC/Desktop/git/LLaMA-Factory/data/
+# 2. 평가셋 50건 추출
+python vlm/bench/dataset.py --source jsonl --n 50
 
-# 3. LoRA 학습
-llamafactory-cli train vlm/train/qwen3vl_lora.yaml
+# 3. JSONL → ShareGPT JSON (평가셋 50건 제외)
+python vlm/train/convert_dataset.py --exclude-eval-set vlm/bench/eval_set.jsonl
+cp vlm/data/livestock_train.json $LLAMAFACTORY_DATA_DIR/
+
+# 4. LoRA 학습 (v2: Vision + AI)
+llamafactory-cli train vlm/train/qwen3vl_lora_v2.yaml
 ```
 
 ### 성능 최적화 이력
 
 | 이슈 | 조치 | 결과 |
 |---|---|---|
-| 초기 속도 254s/step (79시간 예상) | `image_max_pixels` 1003520 → 200704 | 38s/step (12시간) |
+| 초기 속도 254s/step (79시간 예상) | `image_max_pixels` 1,003,520 → 200,704 | 38s/step (12시간) |
 | CP949 인코딩 에러 (`✓`, `→`, `—`) | 학습 문자열 ASCII 화 | 에러 해소 |
 | Windows 멀티프로세싱 느림 | `dataloader_num_workers=0` | 안정화 |
+| Vision frozen 시 시각 학습 효과 부재 | v2: `freeze_vision_tower: false` | Vision LoRA 추가 |
+| 평가셋 학습 노출 (in-distribution) | v2: `--exclude-eval-set` 옵션으로 50건 held-out | 공정한 벤치마크 가능 |
 
 ---
 

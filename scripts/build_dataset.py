@@ -60,7 +60,13 @@ from vlm.config import CFG
 IMAGE_DIR   = CFG.paths.image_dir
 OUTPUT_PATH = os.path.join(ROOT, CFG.paths.dataset_jsonl)
 
-FILENAME_RE = re.compile(r"^.+_ori_\d+_(\d+)_.+\.jpg$", re.IGNORECASE)
+# AI 이미지: 0716_ai_{datetime}_{pigno}_{pigno+offset}_SP_CAM7.jpg
+# ORI 이미지: 0716_ori_{datetime}_{pigno}_SP_CAM7.jpg
+# 첫 번째 숫자가 pigno_cnt
+FILENAME_RE_AI  = re.compile(r"^.+_ai_\d+_(\d+)_\d+_.+\.jpg$",  re.IGNORECASE)
+FILENAME_RE_ORI = re.compile(r"^.+_ori_\d+_(\d+)_.+\.jpg$",     re.IGNORECASE)
+# image_dir 의 모드를 자동 판별 (폴더명으로 AI/ORI 구분)
+FILENAME_RE = FILENAME_RE_AI if "AI" in IMAGE_DIR.upper() else FILENAME_RE_ORI
 
 TASK_PROMPTS = {
     "summary":  "이 돼지 도체 이미지의 판정 결과를 현장 작업자에게 3문장으로 요약해주세요.",

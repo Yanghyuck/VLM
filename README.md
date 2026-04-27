@@ -238,9 +238,10 @@ Swagger UI: http://localhost:8000/docs
 | 주차 | 목표 | 상태 |
 |---|---|---|
 | 1주차 | Pydantic 스키마 + 샘플 수집 | ✅ 완료 |
-| 2주차 | 프롬프트 4종 + **LoRA 학습 완료** (12h 37m, eval_loss=0.130) | ✅ 완료 |
+| 2주차 | 프롬프트 4종 + **v1 LoRA 학습 완료** (text-only, eval_loss=0.130) | ✅ 완료 |
 | 3주차 | Streamlit 데모 + FastAPI + 중앙 설정 + 추론 검증 | ✅ 완료 |
-| 4주차 | 벤치마크 50~100건 (LoRA vs Base) + 문서화 | ⏳ 예정 |
+| 3.5주차 | **v2 재학습** (Vision LoRA + AI 이미지 + held-out 50건) | 🔄 진행 중 |
+| 4주차 | 벤치마크 v1 vs v2 vs Base + 문서화 | ⏳ 예정 |
 
 상세 진행 이력은 [PROGRESS.md](./PROGRESS.md) 를 참고하세요.
 
