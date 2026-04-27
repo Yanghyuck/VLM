@@ -1,0 +1,72 @@
+# =============================================================================
+# docker-compose.yml — VLM Livestock 서비스 묶음
+# -----------------------------------------------------------------------------
+# 사용:
+#   docker compose up api          # FastAPI 서버만
+#   docker compose up demo         # Streamlit 데모만
+#   docker compose up              # 둘 다
+#
+# 전제 조건:
+#   - GPU: NVIDIA Container Toolkit 설치 (nvidia-docker)
+#   - 호스트에 학습된 LoRA 어댑터 (`vlm/train/output/qwen3vl-lora/`)
+#   - 호스트에 config.json (DB 비밀번호 등 채워진 상태)
+# =============================================================================
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vlm-livestock:latest
+    container_name: vlm-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # 설정
+      - ./config.json:/app/config.json:ro
+      # LoRA 어댑터 (호스트 학습 결과 공유)
+      - ./vlm/train/output:/app/vlm/train/output:ro
+      # HuggingFace 캐시 (재다운로드 방지)
+      - ~/.cache/huggingface:/root/.cache/huggingface
+      # 도체 이미지 (운영 환경)
+      - C:/Users/IPC/Desktop/git/thema_pa/images:/data/images:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: ["python", "vlm/api/server.py"]
+    restart: unless-stopped
+
+  demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vlm-livestock:latest
+    container_name: vlm-demo
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./vlm/train/output:/app/vlm/train/output:ro
+      - ~/.cache/huggingface:/root/.cache/huggingface
+      - C:/Users/IPC/Desktop/git/thema_pa/images:/data/images:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command:
+      - python
+      - -m
+      - streamlit
+      - run
+      - vlm/demo/app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      - --server.headless=true
+    restart: unless-stopped

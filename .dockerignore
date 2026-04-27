@@ -1,0 +1,42 @@
+# 모델 가중치 (볼륨 마운트로 처리)
+vlm/train/output/
+
+# 학습 데이터
+vlm/data/
+
+# 로그
+*.log
+vlm/train/*.log
+vlm/api/*.log
+vlm/bench/*.log
+
+# 벤치마크 결과 (런타임 생성)
+vlm/bench/results_*.jsonl
+
+# 비밀 정보
+config.json
+.env
+
+# Git
+.git/
+.github/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# 분석 결과 (런타임 생성 가능)
+docs/figures/
+
+# 문서 (이미지 빌드 시 불필요)
+PROGRESS.md
+ARCHITECTURE.md
+*.md
+!README.md

@@ -1,6 +1,6 @@
 # tests/test_json_extraction.py — _find_balanced_json / _extract_json 단위 테스트
 
-from vlm.train.inference import _find_balanced_json, _extract_json
+from vlm.train.json_utils import _find_balanced_json, _extract_json
 
 
 def test_find_nested_json():
