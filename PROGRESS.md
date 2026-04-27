@@ -389,12 +389,13 @@ curl -X POST http://localhost:8000/v1/report \
 - [ ] 결과 리포트 (점수표 + 실패 케이스 5건 분석)
 
 ### 포트폴리오 완성도
-- [ ] GitHub Actions CI (`pytest` 자동 실행 + 배지)
-- [ ] Dockerfile + docker-compose
-- [ ] 모델 양자화 (INT4) — VRAM 24GB → 6GB
+- [x] GitHub Actions CI (`pytest` 자동 실행 + 배지) — `.github/workflows/ci.yml`, Python 3.11/3.13 매트릭스
+- [x] Dockerfile + docker-compose — GPU 컨테이너 + 모델 가중치 볼륨 마운트
 - [x] 데이터셋 분석 노트북 (등급 분포, 측정값 히스토그램) — `notebooks/dataset_analysis.{py,md}` + 7장 figures
-- [ ] API 인증 (`X-API-Key`)
 - [x] Makefile — 공통 명령 모음
+- [ ] 모델 양자화 (INT4) — VRAM 24GB → 6GB (Day 3)
+- [ ] API 인증 (`X-API-Key`) (Day 3)
+- [ ] 구조적 로깅 (Python `logging` JSON) (Day 3)
 
 ### 운영 전 필요 작업
 - [ ] DB 비밀번호 변경 (이전 노출 대응)

@@ -2,6 +2,7 @@
 
 > **thema_pa** (YOLOv11 돼지 도체 AI) 위에 **Qwen3-VL-8B LoRA 파인튜닝** 모델을 한국어 판정 레이어로 추가하는 3종 포트폴리오
 
+[![CI](https://github.com/Yanghyuck/VLM/actions/workflows/ci.yml/badge.svg)](https://github.com/Yanghyuck/VLM/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.7-ee4c2c.svg)](https://pytorch.org/)
 [![Transformers](https://img.shields.io/badge/Transformers-4.55+-ffb71b.svg)](https://huggingface.co/docs/transformers)
@@ -277,3 +278,22 @@ make convert        # 학습 데이터 변환 (eval 제외)
 make train-v2       # v2 학습 실행 (Vision LoRA + AI)
 make bench-all      # 베이스 + LoRA + 점수
 ```
+
+## 🐳 Docker 실행
+
+NVIDIA Container Toolkit 설치 환경에서 GPU 추론이 가능합니다.
+
+```bash
+# 빌드
+docker build -t vlm-livestock .
+
+# FastAPI + Streamlit 동시 실행
+docker compose up
+
+# 개별 실행
+docker compose up api    # http://localhost:8000
+docker compose up demo   # http://localhost:8501
+```
+
+**볼륨 마운트**: 모델 가중치(8.9B)와 LoRA 어댑터(666MB)는 이미지에 포함하지 않고
+호스트의 `vlm/train/output/qwen3vl-lora/` 를 마운트합니다 (이미지 크기 절감).
