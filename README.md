@@ -195,6 +195,7 @@ pytest tests/ -m integration # 통합 테스트만 (실제 모델/DB 필요)
 |---|---|---|
 | `scripts/test_inference.py` | 학습된 LoRA 어댑터 추론 (3샘플) | ✅ 3/3 |
 | `scripts/test_demo_pipeline.py` | Streamlit 데모 동일 코드 경로 (4샘플) | ✅ 4/4 |
+| `scripts/test_api.py` | FastAPI `/v1/health` + `/v1/report` (4샘플) | ✅ 4/4 |
 
 ---
 
@@ -214,6 +215,8 @@ curl -X POST http://localhost:8000/v1/report \
      -H "Content-Type: application/json" \
      -d @vlm/schema/samples/normal_case.json
 ```
+
+**검증된 추론 시간**: 20~34초 (4샘플 평균 27초, lifespan 모델 사전 로드)
 
 응답:
 ```json

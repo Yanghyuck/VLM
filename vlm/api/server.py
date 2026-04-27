@@ -38,10 +38,16 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
+
+# 프로젝트 루트를 sys.path 에 추가 (직접 실행 시에도 vlm.* import 가능하게)
+_ROOT = Path(__file__).parent.parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

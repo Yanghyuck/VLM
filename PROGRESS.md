@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-04-27
+**최종 업데이트**: 2026-04-27 (3주차 완료)
 **현재 브랜치**: `local-vlm-train`
 **리포지토리**: https://github.com/Yanghyuck/VLM
 
@@ -151,6 +151,20 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 - **통과율: 4/4 (100%)**
 - 4개 필드(`3문장_요약`, `비정상_근거`, `주의사항`, `권고`) 모두 포함 확인
 - 한국어 자연스러움, 도메인 지식 활용 우수
+
+**FastAPI 엔드포인트 검증** (`scripts/test_api.py` → `vlm/api/api_test_results.md`)
+
+- 서버 부팅 (`python vlm/api/server.py` — config.json 의 host/port 사용)
+- `GET /v1/health` → **200** `{"status":"ready","model_used":"lora","adapter_exists":true}`
+- `POST /v1/report` × 4 샘플 → **4/4 200 OK**
+- 추론 시간: 20.3 ~ 33.8초/요청 (lifespan에서 모델 사전 로드, executor 비동기 추론)
+
+| 샘플 | HTTP | 추론 시간 | 등급 |
+|---|---|---|---|
+| `normal_case` | 200 | 22.9초 | 🟢 1+ |
+| `backfat_error_case` | 200 | 33.8초 | 🔴 등외 |
+| `entry_error_case` | 200 | 31.3초 | 🔴 등외 |
+| `sample_3473` | 200 | 20.3초 | 🟢 1+ |
 
 ---
 
@@ -342,8 +356,8 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] Streamlit 데모 실제 모델로 동작 확인 (HTTP 200, 4/4 샘플 통과)
 - [x] 추론 단위 테스트 (3 샘플)
 - [x] 데모 파이프라인 검증 (4 샘플)
-- [ ] FastAPI 엔드포인트 실제 요청 테스트 (`POST /v1/report`)
-- [ ] 데모 GIF 녹화 (생략 결정)
+- [x] FastAPI 엔드포인트 실제 요청 테스트 (4/4 200 OK)
+- [~] 데모 GIF 녹화 (생략 결정)
 
 ### 4주차 (벤치마크)
 - [ ] 평가 데이터셋 선정 (50~100건, train/val 제외)

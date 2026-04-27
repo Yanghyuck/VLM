@@ -15,3 +15,5 @@ vlm/train/test_inference.log
 vlm/train/streamlit.log
 vlm/train/demo_pipeline.log
 vlm/train/output/
+vlm/api/api_server.log
+vlm/api/api_test.log
