@@ -11,4 +11,7 @@ vlm/data/tmp/
 config.json
 vlm/train/train.log
 vlm/train/train_err.log
+vlm/train/test_inference.log
+vlm/train/streamlit.log
+vlm/train/demo_pipeline.log
 vlm/train/output/

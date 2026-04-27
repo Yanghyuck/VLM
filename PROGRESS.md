@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-04-24
+**최종 업데이트**: 2026-04-27
 **현재 브랜치**: `local-vlm-train`
 **리포지토리**: https://github.com/Yanghyuck/VLM
 
@@ -57,8 +57,8 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 | 주차 | 목표 | 상태 | 마감 |
 |---|---|---|---|
 | 1주차 | Pydantic 스키마 + 샘플 10건 수집 | ✅ 완료 | 2026-04-28 |
-| 2주차 | 프롬프트 템플릿 4종 + Qwen3-VL LoRA 학습 파이프라인 | ✅ 완료 | 2026-05-05 |
-| 3주차 | Streamlit 데모 + FastAPI 서빙 + 중앙 설정 관리 | 🔄 진행 중 | 2026-05-12 |
+| 2주차 | 프롬프트 템플릿 4종 + Qwen3-VL LoRA 학습 (학습 완료) | ✅ 완료 | 2026-05-05 |
+| 3주차 | Streamlit 데모 + FastAPI 서빙 + 중앙 설정 + 추론 검증 | ✅ 완료 | 2026-05-12 |
 | 4주차 | 벤치마크 50~100건 (LoRA vs 베이스) + 사례 문서화 | ⏳ 대기 | 2026-05-19 |
 
 ---
@@ -95,16 +95,20 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 - **입력**: DB 레코드 3,355건 + 이미지 매칭
 - **출력**: `livestock_train.json` — **6,710 학습 샘플** (summary / grade / abnormal)
 
-#### LoRA 학습 진행 상황
+#### LoRA 학습 완료 ✅ (2026-04-25 00:00)
 - **모델**: Qwen3-VL-8B-Instruct
 - **최적화**: `image_max_pixels` 400k → 200k, `cutoff_len` 2048 → 1024
 - **속도**: 38초/step (초기 254초/step → **6.7배 개선**)
-- **총 스텝**: 1,134
-- **예상 완료**: 2026-04-24 23:30 경
+- **총 학습 시간**: **12시간 37분** (45,428초)
+- **에폭**: 3.0 / 3.0 (1,134 / 1,134 steps)
+- **train_loss**: 0.187
+- **eval_loss**: **0.130** (eval < train, 과적합 없음)
+- **어댑터 크기**: 666 MB (`adapter_model.safetensors`)
+- **체크포인트**: `checkpoint-800`, `checkpoint-1000`, `checkpoint-1134` 3종 보존
 
-### 3주차 — 데모 & API & 설정 관리 🔄
+### 3주차 — 데모 & API & 설정 관리 ✅
 
-**커밋**: `7e6081a`, `790f29f`, `f435d4e`, `29116f3`, `5cb7fa0` (PROGRESS.md), `ARCHITECTURE.md 갱신`
+**커밋**: `7e6081a`, `790f29f`, `f435d4e`, `29116f3`, `5cb7fa0`, `03b9da1`, `4bcaf70`
 
 #### FastAPI 서버 (`vlm/api/`)
 - `schemas.py` — `ReportRequest`, `ReportResponse` Pydantic 모델
@@ -129,6 +133,24 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 - `README.md` — 프로젝트 랜딩 페이지 (배지, 빠른 시작, 아키텍처 요약, API 예제)
 - `PROGRESS.md` — 전체 진행 상황 통합 뷰
 - `ARCHITECTURE.md` — Qwen3-VL LoRA 기반 현재 구조 반영 (초안 업데이트)
+
+#### 추론 검증 ✅ (2026-04-25 ~ 2026-04-27)
+
+**추론 단위 테스트** (`scripts/test_inference.py` → `vlm/train/test_inference_results.md`)
+
+| 샘플 | 추론 시간 | 결과 |
+|---|---|---|
+| `normal_case` | 45.9초 | ✅ 1+ 등급, 정상 요약 |
+| `backfat_error_case` | 34.6초 | ✅ 등외, 검출 실패 식별 + 주의사항 3개 |
+| `entry_error_case` | 32.6초 | ✅ 등외, 비정상 진입 인식 + 재촬영 권고 |
+
+**Streamlit 데모 파이프라인 검증** (`scripts/test_demo_pipeline.py` → `vlm/train/demo_pipeline_results.md`)
+
+- Streamlit 서버 가동 확인 (HTTP 200, http://localhost:8501)
+- 데모와 동일한 코드 경로(`_build_output()` → `generate_report()`)로 4개 샘플 자동 검증
+- **통과율: 4/4 (100%)**
+- 4개 필드(`3문장_요약`, `비정상_근거`, `주의사항`, `권고`) 모두 포함 확인
+- 한국어 자연스러움, 도메인 지식 활용 우수
 
 ---
 
@@ -315,21 +337,32 @@ curl -X POST http://localhost:8000/v1/report \
 
 ## 다음 할 일
 
-### 단기 (3주차 완료)
-- [ ] LoRA 학습 완료 대기 (2026-04-24 23:30 경)
-- [ ] Streamlit 데모 실제 모델로 동작 확인
-- [ ] FastAPI 엔드포인트 실제 요청 테스트
-- [ ] 3주차 결과 `local-vlm-train` 브랜치 최종 커밋
+### 3주차 잔여 작업
+- [x] LoRA 학습 완료 (2026-04-25 00:00, 12시간 37분)
+- [x] Streamlit 데모 실제 모델로 동작 확인 (HTTP 200, 4/4 샘플 통과)
+- [x] 추론 단위 테스트 (3 샘플)
+- [x] 데모 파이프라인 검증 (4 샘플)
+- [ ] FastAPI 엔드포인트 실제 요청 테스트 (`POST /v1/report`)
+- [ ] 데모 GIF 녹화 (생략 결정)
 
 ### 4주차 (벤치마크)
 - [ ] 평가 데이터셋 선정 (50~100건, train/val 제외)
-- [ ] 벤치마크 러너 (`vlm/bench/`)
+- [ ] 벤치마크 러너 (`vlm/bench/runner.py`)
   - 베이스 모델 vs LoRA 모델 응답 비교
-  - BERTScore / ROUGE / 수치 정확도 측정
-- [ ] 결과 리포트 (mdbook / notion)
+- [ ] 스코어러 (`vlm/bench/scorer.py`)
+  - ROUGE-L / BERTScore (한국어) / 수치 정확도
+- [ ] 결과 리포트 (점수표 + 실패 케이스 5건 분석)
+
+### 포트폴리오 완성도
+- [ ] GitHub Actions CI (`pytest` 자동 실행 + 배지)
+- [ ] Dockerfile + docker-compose
+- [ ] 모델 양자화 (INT4) — VRAM 24GB → 6GB
+- [ ] 데이터셋 분석 노트북 (등급 분포, 측정값 히스토그램)
+- [ ] API 인증 (`X-API-Key`)
+- [ ] Makefile
 
 ### 운영 전 필요 작업
-- [ ] DB 비밀번호 변경 (노출됐던 이전 비밀번호)
+- [ ] DB 비밀번호 변경 (이전 노출 대응)
 - [ ] 환경변수 기반 config 로딩 추가 (`DB_PASSWORD` 등)
 - [ ] HTTPS 리버스 프록시 + rate limiting
 - [ ] 구조적 로깅 + 에러 알림
