@@ -60,9 +60,10 @@ def load_eval_set(n: int, seed: int) -> list[dict]:
     return samples
 
 
-def run(mode: str, n: int, seed: int, output: Path):
+def run(mode: str, n: int, seed: int, output: Path, adapter_path: str | None = None, tag: str | None = None):
     use_adapter = (mode == "lora")
-    safe_print(f"[BENCH] mode={mode} n={n} seed={seed}")
+    label = tag or mode
+    safe_print(f"[BENCH] mode={mode} tag={label} n={n} seed={seed} adapter={adapter_path or 'config-default'}")
 
     samples = load_eval_set(n=n, seed=seed)
     safe_print(f"[BENCH] 평가셋 {len(samples)}건 로드")
@@ -88,7 +89,7 @@ def run(mode: str, n: int, seed: int, output: Path):
 
             t0 = time.time()
             try:
-                pred = generate_report(output_obj, use_adapter=use_adapter)
+                pred = generate_report(output_obj, use_adapter=use_adapter, adapter_path=adapter_path)
                 elapsed = round(time.time() - t0, 2)
                 err = None
             except Exception as e:
@@ -99,6 +100,7 @@ def run(mode: str, n: int, seed: int, output: Path):
             result = {
                 "id": sample["id"],
                 "mode": mode,
+                "tag": label,
                 "elapsed_sec": elapsed,
                 "metadata": meta,
                 "tasks": sample.get("tasks", {}),
@@ -119,10 +121,16 @@ if __name__ == "__main__":
     parser.add_argument("--mode", choices=["base", "lora"], required=True)
     parser.add_argument("--n", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output", type=str, default=None)
+    parser.add_argument("--output", type=str, default=None,
+                        help="결과 JSONL 경로 (기본: results_{tag or mode}.jsonl)")
+    parser.add_argument("--adapter-path", type=str, default=None,
+                        help="LoRA 어댑터 디렉터리 (None=config 기본). v1/v2 비교 시 명시")
+    parser.add_argument("--tag", type=str, default=None,
+                        help="결과에 붙일 라벨 (예: 'lora_v1', 'lora_v2')")
     args = parser.parse_args()
 
+    label = args.tag or args.mode
     out = Path(args.output) if args.output else (
-        ROOT / "vlm" / "bench" / f"results_{args.mode}.jsonl"
+        ROOT / "vlm" / "bench" / f"results_{label}.jsonl"
     )
-    run(args.mode, args.n, args.seed, out)
+    run(args.mode, args.n, args.seed, out, adapter_path=args.adapter_path, tag=args.tag)

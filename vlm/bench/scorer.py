@@ -139,8 +139,17 @@ def evaluate(records: list[dict]) -> dict:
     }
 
 
-def write_report(base_metrics: dict, lora_metrics: dict, output: Path):
+def write_report(metrics_dict: dict[str, dict], output: Path, baseline_key: str = "base"):
+    """N-way 비교 리포트 생성.
+
+    Args:
+        metrics_dict: {"base": metrics, "lora_v1": metrics, "lora_v2": metrics, ...}
+        output: 출력 마크다운 경로
+        baseline_key: 개선% 계산 기준 (기본 "base")
+    """
     output.parent.mkdir(parents=True, exist_ok=True)
+    labels = list(metrics_dict.keys())
+    baseline = metrics_dict.get(baseline_key, metrics_dict[labels[0]])
 
     def cell(v):
         if v == -1.0 or v == -1:
@@ -149,37 +158,86 @@ def write_report(base_metrics: dict, lora_metrics: dict, output: Path):
             return f"{v:.4f}"
         return str(v)
 
-    def diff(b, l):
-        if b == -1.0 or l == -1.0 or b == 0:
-            return "N/A"
-        delta = (l - b) / b * 100 if b != 0 else 0
+    def diff(b, x):
+        if b == -1.0 or x == -1.0 or b == 0:
+            return "—"
+        delta = (x - b) / b * 100 if b != 0 else 0
         return f"+{delta:.1f}%" if delta >= 0 else f"{delta:.1f}%"
 
+    keys = [
+        ("json_parse_rate",   "JSON 파싱 성공률"),
+        ("grade_match_rate",  "등급 일치율"),
+        ("number_citation",   "수치 인용 정확도"),
+        ("rouge_l",           "ROUGE-L (summary)"),
+        ("bert_score_f1",     "BERTScore F1 (ko)"),
+        ("elapsed_avg_sec",   "평균 추론 시간 (초)"),
+    ]
+
     with open(output, "w", encoding="utf-8") as f:
-        f.write("# 벤치마크 결과 — Qwen3-VL-8B Base vs LoRA\n\n")
-        f.write(f"**평가셋 크기**: {base_metrics['n']} 건\n\n")
+        f.write(f"# 벤치마크 결과 — Qwen3-VL-8B {' vs '.join(labels)}\n\n")
+        f.write(f"**평가셋 크기**: {baseline['n']} 건\n\n")
         f.write("## 점수 비교\n\n")
-        f.write("| 지표 | Base | LoRA | 개선 |\n")
-        f.write("|---|---|---|---|\n")
-        keys = [
-            ("json_parse_rate",   "JSON 파싱 성공률"),
-            ("grade_match_rate",  "등급 일치율"),
-            ("number_citation",   "수치 인용 정확도"),
-            ("rouge_l",           "ROUGE-L (summary)"),
-            ("bert_score_f1",     "BERTScore F1 (ko)"),
-            ("elapsed_avg_sec",   "평균 추론 시간 (초)"),
-        ]
+
+        # 헤더
+        f.write("| 지표 |")
+        for lbl in labels:
+            f.write(f" {lbl} |")
+            if lbl != baseline_key:
+                f.write(f" {lbl} vs {baseline_key} |")
+        f.write("\n")
+        f.write("|---|" + "|".join(["---"] * (len(labels) + sum(1 for l in labels if l != baseline_key))) + "|\n")
+
+        # 데이터
         for key, label in keys:
-            f.write(f"| {label} | {cell(base_metrics[key])} | {cell(lora_metrics[key])} | {diff(base_metrics[key], lora_metrics[key])} |\n")
+            f.write(f"| {label} |")
+            for lbl in labels:
+                m = metrics_dict[lbl]
+                f.write(f" {cell(m[key])} |")
+                if lbl != baseline_key:
+                    f.write(f" {diff(baseline[key], m[key])} |")
+            f.write("\n")
+
         f.write("\n## 해석\n\n")
         f.write("- **JSON 파싱 성공률**: 4 필드(`3문장_요약`, `비정상_근거`, `주의사항`, `권고`) 모두 존재 + summary 비어있지 않은 비율\n")
         f.write("- **등급 일치율**: 모델이 출력한 summary 안에 정답 grade 문자열(`1+`, `1`, `2`, `등외`)이 포함된 비율\n")
         f.write("- **수치 인용 정확도**: 등지방/뭇갈래근/도체중 숫자가 응답에 정확히 포함된 비율 (0~1)\n")
         f.write("- **ROUGE-L**: 정답 요약과의 단어 시퀀스 일치도 (0~1)\n")
         f.write("- **BERTScore F1 (ko)**: 한국어 BERT 임베딩 기반 의미 유사도 (0~1)\n")
+        f.write(f"- **개선 % 계산 기준**: `{baseline_key}` 대비\n")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--inputs", nargs="+", required=True,
+                        help="비교할 결과 파일들. 형식: 'label=path' (예: 'base=results_base.jsonl' 'lora_v1=results_lora_v1.jsonl')")
+    parser.add_argument("--baseline", type=str, default="base",
+                        help="개선% 계산 기준 라벨 (기본 'base')")
+    parser.add_argument("--output", type=str, default=str(ROOT / "vlm" / "bench" / "score_report.md"))
+    args = parser.parse_args()
+
+    metrics_dict: dict[str, dict] = {}
+    for spec in args.inputs:
+        if "=" not in spec:
+            raise ValueError(f"입력 형식 오류 (label=path 필요): {spec}")
+        label, path_str = spec.split("=", 1)
+        records = load_jsonl(Path(path_str))
+        print(f"[{label}] {path_str}: {len(records)}건")
+        metrics_dict[label.strip()] = evaluate(records)
+
+    print()
+    for label, metrics in metrics_dict.items():
+        print(f"=== {label} ===")
+        for k, v in metrics.items():
+            print(f"  {k:25s} = {v}")
+        print()
+
+    write_report(metrics_dict, Path(args.output), baseline_key=args.baseline)
+    print(f"리포트 저장: {args.output}")
+    sys.exit(0)
+
+
+# ── 하위 호환 — old CLI 형식 (--base, --lora) ────────────────────────────
+def _legacy_main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", type=str, required=True)
     parser.add_argument("--lora", type=str, required=True)

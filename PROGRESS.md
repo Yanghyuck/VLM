@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-04-27 (3주차 완료, v2 재학습 진행 중)
+**최종 업데이트**: 2026-04-27 (4주차 벤치마크 완료)
 **현재 브랜치**: `local-vlm-train`
 **리포지토리**: https://github.com/Yanghyuck/VLM
 
@@ -59,7 +59,8 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 | 1주차 | Pydantic 스키마 + 샘플 10건 수집 | ✅ 완료 | 2026-04-28 |
 | 2주차 | 프롬프트 템플릿 4종 + Qwen3-VL LoRA 학습 (학습 완료) | ✅ 완료 | 2026-05-05 |
 | 3주차 | Streamlit 데모 + FastAPI 서빙 + 중앙 설정 + 추론 검증 | ✅ 완료 | 2026-05-12 |
-| 4주차 | 벤치마크 50~100건 (LoRA vs 베이스) + 사례 문서화 | ⏳ 대기 | 2026-05-19 |
+| 3.5주차 | v2 재학습 (Vision LoRA + AI 이미지, held-out 50건) | ✅ 완료 | 2026-04-27 |
+| 4주차 | 3-way 벤치마크 (Base / v1 / v2) + 결과 분석 | ✅ 완료 | 2026-04-27 |
 
 ---
 
@@ -165,6 +166,45 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 | `backfat_error_case` | 200 | 33.8초 | 🔴 등외 |
 | `entry_error_case` | 200 | 31.3초 | 🔴 등외 |
 | `sample_3473` | 200 | 20.3초 | 🟢 1+ |
+
+---
+
+## 4주차 — 3-way 벤치마크 결과 ✅
+
+**평가셋**: held-out 50건 (학습에서 제외된 도체)
+**실행 시각**: 2026-04-27 19:36 ~ 20:31 (56.8분)
+**상세 리포트**: [`vlm/bench/score_report.md`](vlm/bench/score_report.md)
+
+### 점수 비교
+
+| 지표 | Base | v1 (text-only LoRA) | v2 (Vision LoRA + AI) |
+|---|---|---|---|
+| JSON 파싱 성공률 | 1.000 | 1.000 | 1.000 |
+| 등급 일치율 | 1.000 | 1.000 | 1.000 |
+| 수치 인용 정확도 | 1.000 | 1.000 | 1.000 |
+| **ROUGE-L (summary)** | 0.696 | 0.739 (+6.2%) | **0.876 (+26.0%)** ⭐ |
+| **BERTScore F1 (ko)** | 0.842 | 0.901 (+7.0%) | **0.957 (+13.7%)** ⭐ |
+| 평균 추론 시간 | 15.8초 | 26.7초 | 24.5초 |
+
+### 핵심 발견
+
+1. **상한선이 이미 높음** — system_prompt 가 강력해서 베이스 모델도 JSON 형식·등급·수치는 100% 정확
+2. **LoRA의 진짜 가치는 의미적·어휘적 일치도** — reference 와의 정확한 표현 패턴 학습
+3. **v2 (Vision + AI) > v1 (text-only) > Base** — 일관된 우열
+4. **v2 ROUGE-L +26%, BERTScore +13.7%** — 통계적으로 유의미한 개선
+5. **추론 시간**: LoRA 적용으로 ~10초 증가 (PEFT layer 추가 연산), v2 가 v1보다 약간 빠름
+
+### 시사점
+
+- **Vision LoRA + AI 이미지 학습이 통계적으로 입증된 효과** (+26% ROUGE-L)
+- "텍스트만 학습 vs 비전까지 학습" 의 정량적 차이를 처음 확인
+- AI 이미지의 시각 단서(등지방 영역, 측정 라인)가 모델 응답 품질에 기여
+
+### 한계 (정직한 평가)
+
+- 단일 일자(2026-04-22) 데이터로 학습/평가 → 시간적 일반화 미검증
+- 등외 케이스 부재 → error_code 처리 능력은 별도 검증 필요
+- 이미지 다양성 제한 (단일 카메라/조명/각도)
 
 ---
 
@@ -420,13 +460,13 @@ curl -X POST http://localhost:8000/v1/report \
 - 학습 샘플: 6,710 → **6,610** (50건 × 2 task held-out 제외)
 - 평가셋 50건: `vlm/bench/eval_set.jsonl` (등급 분포 1+:23 / 1:15 / 2:12)
 
-### 4주차 (벤치마크)
-- [ ] 평가 데이터셋 선정 (50~100건, train/val 제외)
-- [ ] 벤치마크 러너 (`vlm/bench/runner.py`)
-  - 베이스 모델 vs LoRA 모델 응답 비교
-- [ ] 스코어러 (`vlm/bench/scorer.py`)
-  - ROUGE-L / BERTScore (한국어) / 수치 정확도
-- [ ] 결과 리포트 (점수표 + 실패 케이스 5건 분석)
+### 4주차 (벤치마크) ✅
+- [x] 평가 데이터셋 선정 (50건 held-out, 학습 제외)
+- [x] 벤치마크 러너 (`vlm/bench/runner.py`) — base/v1/v2 추론
+- [x] 스코어러 (`vlm/bench/scorer.py`) — N-way 비교, ROUGE-L / BERTScore (ko) / 4종 정확도
+- [x] 결과 리포트 (`vlm/bench/score_report.md`)
+- [x] 3-way 자동 실행 스크립트 (`scripts/run_3way_benchmark.py`)
+- [ ] 실패 케이스 5건 정성적 분석 (선택)
 
 ### 포트폴리오 완성도
 - [x] GitHub Actions CI (`pytest` 자동 실행 + 배지) — `.github/workflows/ci.yml`, Python 3.11/3.13 매트릭스

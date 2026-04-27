@@ -66,18 +66,25 @@ PROMPT_DIR    = Path(__file__).parent.parent / "prompt"
 
 _model:     Optional[object] = None
 _processor: Optional[object] = None
-_loaded_mode: Optional[str] = None  # "lora" | "base"
+_loaded_mode: Optional[str] = None  # "lora:<path>" | "base"
 
 
-def _load_model(use_adapter: bool = True):
-    """모델 로드. use_adapter=False 면 LoRA 어댑터 적용 없이 베이스 모델만 사용 (벤치마크용)."""
+def _load_model(use_adapter: bool = True, adapter_path: str | None = None):
+    """모델 로드.
+
+    Args:
+        use_adapter: True 면 LoRA 어댑터 적용. False 면 베이스 모델만 사용.
+        adapter_path: 사용할 어댑터 경로. None 이면 CFG.paths.lora_adapter 사용.
+                      여러 어댑터(v1, v2)를 비교할 때 명시.
+    """
     global _model, _processor, _loaded_mode
 
-    desired_mode = "lora" if use_adapter else "base"
+    effective_path = adapter_path if adapter_path else ADAPTER_PATH
+    desired_mode = f"lora:{effective_path}" if use_adapter else "base"
+
     if _model is not None and _loaded_mode == desired_mode:
         return
     if _model is not None and _loaded_mode != desired_mode:
-        # 모드 전환 — 기존 모델 해제
         print(f"[inference] 모드 전환: {_loaded_mode} -> {desired_mode}")
         del _model
         _model = None
@@ -97,14 +104,14 @@ def _load_model(use_adapter: bool = True):
         trust_remote_code=True,
     )
 
-    adapter = Path(ADAPTER_PATH)
+    adapter = Path(effective_path)
     if use_adapter and adapter.exists():
-        print(f"[inference] LoRA 어댑터 로딩: {ADAPTER_PATH}")
-        _model = PeftModel.from_pretrained(base, ADAPTER_PATH)
-        _loaded_mode = "lora"
+        print(f"[inference] LoRA 어댑터 로딩: {effective_path}")
+        _model = PeftModel.from_pretrained(base, str(effective_path))
+        _loaded_mode = desired_mode
     else:
         if use_adapter and not adapter.exists():
-            print(f"[inference] 어댑터 없음 — 베이스 모델로 추론 ({ADAPTER_PATH})")
+            print(f"[inference] 어댑터 없음 — 베이스 모델로 추론 ({effective_path})")
         else:
             print(f"[inference] 베이스 모델 단독 추론 (use_adapter=False)")
         _model = base
@@ -129,12 +136,17 @@ def _select_template(output: ThemaPAOutput) -> str:
 from vlm.train.json_utils import _find_balanced_json, _extract_json  # noqa: F401
 
 
-def generate_report(output: ThemaPAOutput, use_adapter: bool = True) -> dict:
+def generate_report(
+    output: ThemaPAOutput,
+    use_adapter: bool = True,
+    adapter_path: str | None = None,
+) -> dict:
     """ThemaPAOutput → 한국어 판정 리포트 dict.
 
     Args:
         output: 도체 판정 결과
         use_adapter: True 면 LoRA 어댑터 적용, False 면 베이스 모델만 사용 (벤치마크용)
+        adapter_path: 사용할 어댑터 경로 (None 이면 config 기본값)
 
     반환 형식:
         {
@@ -144,7 +156,7 @@ def generate_report(output: ThemaPAOutput, use_adapter: bool = True) -> dict:
             "권고": str,
         }
     """
-    _load_model(use_adapter=use_adapter)
+    _load_model(use_adapter=use_adapter, adapter_path=adapter_path)
 
     system_text = _load_prompt("system_prompt.txt")
     template    = _select_template(output)

@@ -103,6 +103,10 @@ score:
 
 bench-all: bench-base bench-lora score
 
+# 3-way 벤치마크 (Base / v1 / v2 동시)
+bench-3way:
+	$(PY) scripts/run_3way_benchmark.py
+
 clean:
 	rm -f vlm/train/train.log vlm/train/train_err.log
 	rm -f vlm/train/test_inference.log vlm/train/streamlit.log
