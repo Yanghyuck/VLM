@@ -123,7 +123,11 @@ thema_pa MySQL DB + 도체 이미지
 | 스키마 | Pydantic v2 | 타입 안전 + JSON 호환 |
 | DB | MySQL 8.x | thema_pa 기존 DB 재사용 |
 | 평가 | ROUGE-L + BERTScore (ko) | 한국어 NLG 표준 |
-| 테스트 | pytest | markers + testpaths |
+| 테스트 | pytest + pytest-asyncio | markers + testpaths + async |
+| API 보안 | slowapi + X-API-Key | rate limit + 인증 |
+| 로깅 | python-json-logger | request_id, latency 자동 |
+| CI | GitHub Actions | Python 3.11/3.13 매트릭스 |
+| 컨테이너 | Docker + docker-compose | NVIDIA GPU 지원 |
 
 ---
 
@@ -137,21 +141,48 @@ VLM/
 ├── config.example.json        # 설정 템플릿
 ├── requirements.txt
 ├── pytest.ini
+├── Makefile                   # 공통 명령 모음
+├── Dockerfile                 # GPU 컨테이너 이미지
+├── docker-compose.yml         # API + Demo 서비스 정의
+│
+├── .github/workflows/ci.yml   # GitHub Actions CI (Python 3.11/3.13)
 │
 ├── scripts/
 │   ├── build_dataset.py       # DB + 이미지 → JSONL
-│   └── export_from_db.py      # DB → 샘플 JSON
+│   ├── export_from_db.py      # DB → 샘플 JSON
+│   ├── test_inference.py      # 학습된 LoRA 추론 검증
+│   ├── test_demo_pipeline.py  # Streamlit 데모 파이프라인 검증
+│   └── test_api.py            # FastAPI 엔드포인트 검증
 │
 ├── vlm/
-│   ├── config.py              # CFG 로더
+│   ├── config.py              # config.json 로더
+│   ├── logging_config.py      # JSON 구조적 로깅
 │   ├── schema/                # Pydantic 공통 모델
 │   ├── prompt/                # 4종 프롬프트 템플릿
-│   ├── train/                 # LoRA 학습 + 로컬 추론
-│   ├── api/                   # FastAPI 서버
+│   ├── train/
+│   │   ├── inference.py       # 로컬 LoRA 추론
+│   │   ├── json_utils.py      # JSON 파서 (torch 비의존)
+│   │   ├── convert_dataset.py # ShareGPT 변환 (held-out 지원)
+│   │   ├── qwen3vl_lora.yaml  # v1 학습 설정
+│   │   └── qwen3vl_lora_v2.yaml # v2 (Vision LoRA + AI 이미지)
+│   ├── api/
+│   │   ├── schemas.py         # 요청/응답 모델
+│   │   ├── auth.py            # X-API-Key 검증
+│   │   └── server.py          # FastAPI 앱 (auth + rate limit + 로깅)
+│   ├── bench/
+│   │   ├── dataset.py         # 평가셋 빌드 (jsonl / db)
+│   │   ├── runner.py          # base / lora 추론 실행
+│   │   └── scorer.py          # ROUGE-L / BERTScore / 일치율
 │   ├── demo/                  # Streamlit 데모
 │   └── report/                # inference.py 위임 shim
 │
-└── tests/                     # 23 테스트 (스키마, API, config, JSON 파서)
+├── notebooks/
+│   ├── dataset_analysis.py    # 데이터셋 분석 스크립트
+│   └── dataset_analysis.md    # 분석 리포트 + 시각화 narrative
+│
+├── docs/figures/              # 7장 시각화 (등급 분포, 측정값 등)
+│
+└── tests/                     # 31 테스트 (스키마/API/config/JSON/auth/로깅)
 ```
 
 ---

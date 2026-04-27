@@ -1,6 +1,6 @@
 # 한국어 축산 AI 판정 코파일럿 — 아키텍처
 
-> 최종 업데이트: 2026-04-24
+> 최종 업데이트: 2026-04-27
 > 기반 코드: `thema_pa` (YOLOv11 기반 돼지 도체 분석 시스템)
 > 메인 엔진: **Qwen3-VL-8B-Instruct + LoRA 파인튜닝** (로컬 추론)
 
@@ -211,9 +211,17 @@ thema_pa 기존 REST/MQTT 흐름에 VLM 설명 레이어 추가.
 
 ```
 GET  /v1/health
-  응답: { "status": "ready"|"loading", "model_used": "lora"|"base" }
+  공개. 응답: {
+    "status": "ready"|"loading",
+    "model_used": "lora"|"base",
+    "adapter_exists": bool,
+    "auth_enabled": bool,
+    "rate_limit_per_minute": int
+  }
 
 POST /v1/report
+  보안: X-API-Key 헤더 검증 (api_keys 등록 시)
+  Rate limit: config.api.rate_limit_per_minute (default 60/min)
   요청: ThemaPAOutput 호환 JSON
   응답: {
     "summary": "3문장 요약",
@@ -222,27 +230,44 @@ POST /v1/report
     "recommendation": "권고",
     "model_used": "lora (3.2s)"
   }
+  응답 헤더: X-Request-ID (UUID8, 분산 추적)
 
 GET  /docs  — Swagger UI 자동 생성
 ```
 
-### 보안 & 안정성 장치
+### 보안 & 안정성 장치 (7가지)
+
+| 항목 | 구현 | 응답 코드 |
+|---|---|---|
+| **X-API-Key 인증** | `vlm/api/auth.py` 의 `verify_api_key` Depends | 401 |
+| **Rate limiting** | `slowapi` Limiter, 분당 N회 | 429 |
+| **추론 타임아웃** | `asyncio.wait_for(timeout=180)` | 504 |
+| **경로 traversal 차단** | `result_image_path` 를 `image_dir` 하위로 제한 | 403 |
+| **CORS 화이트리스트** | `config.api.allowed_origins` | — |
+| **이벤트 루프 블로킹 방지** | `run_in_executor` 로 추론 위임 | — |
+| **모델 로드 상태 표시** | `_model_ready` 플래그 → `/v1/health` 반영 | 503 |
+
+### 관측성 (Observability)
 
 | 항목 | 구현 |
 |---|---|
-| 이벤트 루프 블로킹 방지 | `asyncio.run_in_executor` 로 추론 위임 |
-| 추론 타임아웃 | `asyncio.wait_for(timeout=180)` (config 가변) |
-| 경로 traversal 차단 | `result_image_path` 를 `CFG.paths.image_dir` 하위로 제한 |
-| CORS 제한 | `CFG.api.allowed_origins` 화이트리스트 |
-| 모델 로드 상태 표시 | `_model_ready` 플래그 → `/v1/health` 반영 |
+| **JSON 구조적 로그** | `vlm/logging_config.py` 의 `JsonFormatter` |
+| **요청 추적** | `X-Request-ID` (UUID8, 응답 헤더 + 로그) |
+| **자동 기록 필드** | request_id, method, path, status_code, elapsed_ms, client |
+| **추론 결과 로그** | carcass_no, grade, elapsed_sec, model |
+| **설정** | `config.logging.level` / `config.logging.format` (`json`\|`text`) |
 
 ### 파일 구성
 
 ```
 vlm/api/
 ├── __init__.py
-├── schemas.py     # ReportRequest / ReportResponse Pydantic
-└── server.py      # FastAPI 앱 + lifespan + 엔드포인트
+├── schemas.py    # ReportRequest / ReportResponse Pydantic
+├── auth.py       # X-API-Key 검증 (Depends 용)
+└── server.py     # FastAPI 앱 + lifespan + 미들웨어 + 엔드포인트
+
+vlm/
+└── logging_config.py  # JSON / text 로거 설정 (서버·학습 공용)
 ```
 
 ### 실행
@@ -250,6 +275,21 @@ vlm/api/
 ```bash
 python vlm/api/server.py           # config.json 의 host/port 사용
 uvicorn vlm.api.server:app --reload
+```
+
+### 호출 예시
+
+```bash
+# api_keys 미등록 시 (개발 모드)
+curl -X POST http://localhost:8000/v1/report \
+     -H "Content-Type: application/json" \
+     -d @vlm/schema/samples/normal_case.json
+
+# api_keys 등록 후 (운영 모드)
+curl -X POST http://localhost:8000/v1/report \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: my-secret-key-123" \
+     -d @vlm/schema/samples/normal_case.json
 ```
 
 ---
@@ -356,21 +396,31 @@ llamafactory-cli train vlm/train/qwen3vl_lora_v2.yaml
 
 ## 7. 테스트 전략
 
-**4개 파일, 23개 테스트, 모두 통과 (2026-04-24 기준)**
+**6개 파일, 31개 테스트, 모두 통과 (2026-04-27 기준)**
 
 ```
 tests/
 ├── test_schema.py          # ThemaPAOutput 유효성 (5)
 ├── test_api_schemas.py     # ReportRequest/Response (7)
 ├── test_config.py          # config.py 로더 (3)
-└── test_json_extraction.py # brace-balanced JSON parser (8)
+├── test_json_extraction.py # brace-balanced JSON parser (8)
+├── test_auth.py            # X-API-Key 인증 (4, asyncio)
+└── test_logging.py         # JSON 구조적 로깅 (4)
 ```
 
 ```bash
 pytest tests/
 ```
 
-`pytest.ini` 에 `markers=integration` 등록 — 통합 테스트는 기본 실행에서 제외.
+`pytest.ini` 에 `asyncio_mode=auto` + `markers=integration` 등록.
+통합 테스트는 기본 실행에서 제외 (`-m "not integration"`).
+
+### CI/CD
+
+- GitHub Actions (`.github/workflows/ci.yml`)
+- Python 3.11 + 3.13 매트릭스
+- `vlm/train/json_utils.py` 로 JSON 파서 분리하여 torch 미설치 환경에서도 모든 단위 테스트 통과
+- 로컬 환경과 동일하게 31/31 통과
 
 ---
 
@@ -386,7 +436,12 @@ pytest tests/
 | 스키마 | Pydantic v2 | thema_pa JSON → 타입 안전 |
 | DB | MySQL 8.x (`ai_grade_judg_dvlp`) | thema_pa 기존 DB 재사용 |
 | 평가 | ROUGE-L + BERTScore (ko) | 한국어 NLG 표준 지표 |
-| 테스트 | pytest | testpaths, markers |
+| 테스트 | pytest + pytest-asyncio | testpaths, markers, asyncio_mode |
+| **인증** | X-API-Key 헤더 | 운영 보안 |
+| **Rate limit** | slowapi | 분당 N회 제한, 429 응답 |
+| **로깅** | python-json-logger | request_id, latency 자동 |
+| **CI** | GitHub Actions | Python 3.11/3.13 매트릭스 |
+| **컨테이너** | Docker + docker-compose | NVIDIA GPU + 볼륨 마운트 |
 | 설정 | JSON + SimpleNamespace 로더 | 외부 의존성 없음 |
 
 ---
