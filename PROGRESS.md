@@ -211,7 +211,7 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 
 ## 테스트 현황
 
-**최종 결과: 23/23 통과**
+**최종 결과: 31/31 통과** (2026-04-27 기준)
 
 | 파일 | 테스트 수 | 대상 |
 |---|---|---|
@@ -219,6 +219,16 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 | `tests/test_api_schemas.py` | 7 | `ReportRequest`, `ReportResponse` |
 | `tests/test_config.py` | 3 | `config.py` 로더 |
 | `tests/test_json_extraction.py` | 8 | `_find_balanced_json`, `_extract_json` |
+| `tests/test_auth.py` | 4 | X-API-Key 인증 (asyncio) |
+| `tests/test_logging.py` | 4 | JSON 구조적 로깅 |
+
+**End-to-End 검증 스크립트**
+
+| 스크립트 | 검증 내용 | 결과 |
+|---|---|---|
+| `scripts/test_inference.py` | LoRA 어댑터 추론 (3샘플) | ✅ 3/3 |
+| `scripts/test_demo_pipeline.py` | Streamlit 데모 동일 코드 경로 (4샘플) | ✅ 4/4 |
+| `scripts/test_api.py` | FastAPI `/v1/health` + `/v1/report` (4샘플) | ✅ 4/4 |
 
 ```bash
 pytest tests/
@@ -230,23 +240,35 @@ pytest tests/
 
 ```
 VLM/
-├── config.json                  ← gitignore (로컬 전용)
-├── config.example.json          ← 더미 템플릿 (git 추적)
-├── requirements.txt             ← 모든 Python 의존성
-├── pytest.ini                   ← 테스트 설정
+├── config.json                       ← gitignore (로컬 전용)
+├── config.example.json               ← 더미 템플릿 (git 추적)
+├── requirements.txt                  ← 모든 Python 의존성
+├── pytest.ini                        ← 테스트 설정 (asyncio_mode=auto)
+├── Makefile                          ← 공통 명령 17개
+├── Dockerfile                        ← GPU 컨테이너
+├── docker-compose.yml                ← API + Demo 서비스
+├── .dockerignore
 ├── .gitignore
-├── PROGRESS.md                  ← 본 문서
+├── PROGRESS.md                       ← 본 문서
+├── README.md
+├── ARCHITECTURE.md
+│
+├── .github/workflows/ci.yml          ← GitHub Actions CI
 │
 ├── scripts/
-│   ├── build_dataset.py         ← DB + 이미지 → JSONL
-│   └── export_from_db.py        ← DB → 샘플 JSON
+│   ├── build_dataset.py              ← DB + AI 이미지 → JSONL
+│   ├── export_from_db.py             ← DB → 샘플 JSON
+│   ├── test_inference.py             ← 학습된 LoRA 추론 검증
+│   ├── test_demo_pipeline.py         ← Streamlit 데모 파이프라인 검증
+│   └── test_api.py                   ← FastAPI 엔드포인트 검증
 │
 ├── vlm/
-│   ├── config.py                ← CFG 로더
+│   ├── config.py                     ← config.json 로더
+│   ├── logging_config.py             ← JSON 구조적 로깅
 │   │
 │   ├── schema/
-│   │   ├── thema_pa_output.py   ← 공통 Pydantic 모델
-│   │   └── samples/             ← 샘플 JSON
+│   │   ├── thema_pa_output.py        ← 공통 Pydantic 모델
+│   │   └── samples/                  ← 샘플 JSON
 │   │
 │   ├── prompt/
 │   │   ├── system_prompt.txt
@@ -255,28 +277,46 @@ VLM/
 │   │   └── failure_analysis.txt
 │   │
 │   ├── report/
-│   │   └── generator.py         ← inference.py 위임 shim
+│   │   └── generator.py              ← inference.py 위임 shim
 │   │
 │   ├── train/
-│   │   ├── convert_dataset.py   ← ShareGPT 변환
-│   │   ├── qwen3vl_lora.yaml    ← LoRA 학습 설정
-│   │   ├── inference.py         ← 로컬 추론
-│   │   └── output/qwen3vl-lora/ ← LoRA 어댑터 (학습 완료 후)
+│   │   ├── convert_dataset.py        ← ShareGPT 변환 (held-out 지원)
+│   │   ├── qwen3vl_lora.yaml         ← v1 (text-only LoRA) 설정
+│   │   ├── qwen3vl_lora_v2.yaml      ← v2 (Vision LoRA + AI 이미지) 설정
+│   │   ├── inference.py              ← 로컬 추론 (use_adapter 토글)
+│   │   ├── json_utils.py             ← JSON 파서 (torch 비의존)
+│   │   └── output/
+│   │       ├── qwen3vl-lora-v1-textonly/  ← v1 백업
+│   │       └── qwen3vl-lora/              ← v2 (학습 중)
 │   │
 │   ├── api/
-│   │   ├── schemas.py           ← 요청/응답 모델
-│   │   └── server.py            ← FastAPI 앱
+│   │   ├── schemas.py                ← 요청/응답 모델
+│   │   ├── auth.py                   ← X-API-Key 검증
+│   │   └── server.py                 ← FastAPI (auth + rate limit + 로깅)
+│   │
+│   ├── bench/
+│   │   ├── dataset.py                ← 평가셋 빌드 (jsonl / db)
+│   │   ├── runner.py                 ← base / lora 추론 실행
+│   │   └── scorer.py                 ← ROUGE / BERTScore / 일치율
 │   │
 │   ├── demo/
-│   │   └── app.py               ← Streamlit 3패널 UI
+│   │   └── app.py                    ← Streamlit 3패널 UI
 │   │
-│   └── data/                    ← gitignore (JSONL, 업로드 파일)
+│   └── data/                         ← gitignore (JSONL, 업로드 파일)
 │
-└── tests/
-    ├── test_schema.py
-    ├── test_api_schemas.py
-    ├── test_config.py
-    └── test_json_extraction.py
+├── notebooks/
+│   ├── dataset_analysis.py           ← 분석 스크립트
+│   └── dataset_analysis.md           ← 리포트 + narrative
+│
+├── docs/figures/                     ← 7장 시각화 .png
+│
+└── tests/                            ← 31 테스트 (6개 파일)
+    ├── test_schema.py                # ThemaPAOutput (5)
+    ├── test_api_schemas.py           # Request/Response (7)
+    ├── test_config.py                # config 로더 (3)
+    ├── test_json_extraction.py       # JSON 파서 (8)
+    ├── test_auth.py                  # X-API-Key (4, asyncio)
+    └── test_logging.py               # JSON 로깅 (4)
 ```
 
 ---
