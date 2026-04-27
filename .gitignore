@@ -17,3 +17,6 @@ vlm/train/demo_pipeline.log
 vlm/train/output/
 vlm/api/api_server.log
 vlm/api/api_test.log
+vlm/bench/runner_base.log
+vlm/bench/runner_lora.log
+vlm/train/train_v2.log

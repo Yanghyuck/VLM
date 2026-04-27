@@ -66,16 +66,29 @@ PROMPT_DIR    = Path(__file__).parent.parent / "prompt"
 
 _model:     Optional[object] = None
 _processor: Optional[object] = None
+_loaded_mode: Optional[str] = None  # "lora" | "base"
 
 
-def _load_model():
-    global _model, _processor
+def _load_model(use_adapter: bool = True):
+    """모델 로드. use_adapter=False 면 LoRA 어댑터 적용 없이 베이스 모델만 사용 (벤치마크용)."""
+    global _model, _processor, _loaded_mode
 
-    if _model is not None:
+    desired_mode = "lora" if use_adapter else "base"
+    if _model is not None and _loaded_mode == desired_mode:
         return
+    if _model is not None and _loaded_mode != desired_mode:
+        # 모드 전환 — 기존 모델 해제
+        print(f"[inference] 모드 전환: {_loaded_mode} -> {desired_mode}")
+        del _model
+        _model = None
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
-    print(f"[inference] 모델 로딩: {BASE_MODEL_ID}")
-    _processor = AutoProcessor.from_pretrained(BASE_MODEL_ID, trust_remote_code=True)
+    print(f"[inference] 모델 로딩: {BASE_MODEL_ID} (mode={desired_mode})")
+    if _processor is None:
+        _processor = AutoProcessor.from_pretrained(BASE_MODEL_ID, trust_remote_code=True)
 
     base = Qwen3VLForConditionalGeneration.from_pretrained(
         BASE_MODEL_ID,
@@ -85,12 +98,17 @@ def _load_model():
     )
 
     adapter = Path(ADAPTER_PATH)
-    if adapter.exists():
+    if use_adapter and adapter.exists():
         print(f"[inference] LoRA 어댑터 로딩: {ADAPTER_PATH}")
         _model = PeftModel.from_pretrained(base, ADAPTER_PATH)
+        _loaded_mode = "lora"
     else:
-        print(f"[inference] 어댑터 없음 — 베이스 모델로 추론 ({ADAPTER_PATH})")
+        if use_adapter and not adapter.exists():
+            print(f"[inference] 어댑터 없음 — 베이스 모델로 추론 ({ADAPTER_PATH})")
+        else:
+            print(f"[inference] 베이스 모델 단독 추론 (use_adapter=False)")
         _model = base
+        _loaded_mode = "base"
 
     _model.eval()
 
@@ -170,8 +188,12 @@ def _extract_json(text: str) -> dict:
     }
 
 
-def generate_report(output: ThemaPAOutput) -> dict:
+def generate_report(output: ThemaPAOutput, use_adapter: bool = True) -> dict:
     """ThemaPAOutput → 한국어 판정 리포트 dict.
+
+    Args:
+        output: 도체 판정 결과
+        use_adapter: True 면 LoRA 어댑터 적용, False 면 베이스 모델만 사용 (벤치마크용)
 
     반환 형식:
         {
@@ -181,7 +203,7 @@ def generate_report(output: ThemaPAOutput) -> dict:
             "권고": str,
         }
     """
-    _load_model()
+    _load_model(use_adapter=use_adapter)
 
     system_text = _load_prompt("system_prompt.txt")
     template    = _select_template(output)
@@ -191,6 +213,13 @@ def generate_report(output: ThemaPAOutput) -> dict:
     if image_path and Path(image_path).exists():
         from PIL import Image
         image = Image.open(image_path).convert("RGB")
+        # OOM 방지: 학습 시 사용한 image_max_pixels 로 리사이즈
+        max_pixels = getattr(CFG.model, "image_max_pixels", 200_704)
+        w, h = image.size
+        if w * h > max_pixels:
+            scale = (max_pixels / (w * h)) ** 0.5
+            new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
+            image = image.resize((new_w, new_h), Image.LANCZOS)
         messages = [
             {"role": "system",  "content": system_text},
             {"role": "user",    "content": [

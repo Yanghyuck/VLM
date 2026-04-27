@@ -148,13 +148,26 @@ def _is_normal(ec: dict) -> bool:
     return all(v == 0 for v in ec.values())
 
 
-def convert(limit: int | None = None, output_path: Path = OUTPUT_PATH) -> None:
+def convert(
+    limit: int | None = None,
+    output_path: Path = OUTPUT_PATH,
+    exclude_ids: set[str] | None = None,
+) -> None:
+    """dataset.jsonl 을 ShareGPT 학습 JSON 으로 변환.
+
+    Args:
+        limit: 처리할 최대 원본 레코드 수
+        output_path: 출력 경로
+        exclude_ids: 학습 제외할 도체번호 set (벤치마크 held-out 용)
+    """
     if not INPUT_PATH.exists():
         print(f"[ERROR] {INPUT_PATH} 없음. 먼저 scripts/build_dataset.py 실행 필요.")
         sys.exit(1)
 
+    exclude_ids = exclude_ids or set()
     records = []
     skipped = 0
+    excluded_count = 0
 
     with open(INPUT_PATH, encoding="utf-8") as f:
         for line in f:
@@ -164,6 +177,10 @@ def convert(limit: int | None = None, output_path: Path = OUTPUT_PATH) -> None:
             meta       = row["metadata"]
             image_path = row["image_path"]
             tasks      = row.get("tasks", {})
+
+            if str(row["id"]) in exclude_ids:
+                excluded_count += 1
+                continue
 
             if not os.path.exists(image_path):
                 skipped += 1
@@ -206,13 +223,24 @@ def convert(limit: int | None = None, output_path: Path = OUTPUT_PATH) -> None:
     print(f"변환 완료: {len(records)}건 → {output_path}")
     if skipped:
         print(f"이미지 없음 스킵: {skipped}건")
+    if excluded_count:
+        print(f"평가셋 제외: {excluded_count}건 (held-out)")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit",  type=int, help="변환할 최대 원본 레코드 수")
     parser.add_argument("--output", type=str, help="출력 경로 (기본: vlm/data/livestock_train.json)")
+    parser.add_argument("--exclude-eval-set", type=str,
+                        help="평가셋 JSONL 경로 — 해당 도체번호들을 학습에서 제외")
     args = parser.parse_args()
 
+    exclude_ids: set[str] = set()
+    if args.exclude_eval_set:
+        with open(args.exclude_eval_set, encoding="utf-8") as f:
+            for line in f:
+                exclude_ids.add(str(json.loads(line)["id"]))
+        print(f"제외할 평가셋 ID 로드: {len(exclude_ids)}건")
+
     out = Path(args.output) if args.output else OUTPUT_PATH
-    convert(limit=args.limit, output_path=out)
+    convert(limit=args.limit, output_path=out, exclude_ids=exclude_ids)

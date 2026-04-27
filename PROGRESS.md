@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-04-27 (3주차 완료)
+**최종 업데이트**: 2026-04-27 (3주차 완료, v2 재학습 진행 중)
 **현재 브랜치**: `local-vlm-train`
 **리포지토리**: https://github.com/Yanghyuck/VLM
 
@@ -358,6 +358,26 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] 데모 파이프라인 검증 (4 샘플)
 - [x] FastAPI 엔드포인트 실제 요청 테스트 (4/4 200 OK)
 - [~] 데모 GIF 녹화 (생략 결정)
+
+### v2 재학습 (Vision LoRA + AI 이미지, 진행 중)
+**시작**: 2026-04-27
+**예상 완료**: 2026-04-28 (약 16~18시간)
+
+핵심 변경:
+- ✅ v1 어댑터 백업 (`vlm/train/output/qwen3vl-lora-v1-textonly/`)
+- ✅ 이미지 소스: ORI → **AI** (등지방/뭇갈래근 시각 오버레이 포함)
+- ✅ Vision Tower LoRA 학습 활성화 (`freeze_vision_tower: false`)
+- ✅ Multi-modal Projector LoRA 학습 활성화
+- ✅ 평가셋 50건 학습 데이터에서 제외 (held-out 벤치마크)
+- ✅ image_max_pixels 200,704 → 100,352 (vision 학습 메모리 보전)
+- ✅ gradient_accumulation_steps 16 → 32 (effective batch 16 유지)
+- 🔄 학습 진행 중 (`vlm/train/qwen3vl_lora_v2.yaml`)
+- ⏳ v1 vs v2 벤치마크 (학습 완료 후)
+
+**학습 데이터 변경**:
+- 이미지 소스: `thema_pa/images/AI/` (3,473장 중 3,355장 매칭)
+- 학습 샘플: 6,710 → **6,610** (50건 × 2 task held-out 제외)
+- 평가셋 50건: `vlm/bench/eval_set.jsonl` (등급 분포 1+:23 / 1:15 / 2:12)
 
 ### 4주차 (벤치마크)
 - [ ] 평가 데이터셋 선정 (50~100건, train/val 제외)

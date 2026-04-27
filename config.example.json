@@ -7,7 +7,9 @@
     "name": "ai_grade_judg_dvlp"
   },
   "paths": {
-    "image_dir": "C:/path/to/thema_pa/images",
+    "image_dir": "C:/path/to/thema_pa/images/AI",
+    "image_dir_ai": "C:/path/to/thema_pa/images/AI",
+    "image_dir_ori": "C:/path/to/thema_pa/images/ORI",
     "dataset_jsonl": "vlm/data/dataset.jsonl",
     "train_json": "vlm/data/livestock_train.json",
     "llamafactory_data_dir": "C:/path/to/LLaMA-Factory/data",
