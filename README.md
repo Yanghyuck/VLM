@@ -8,7 +8,7 @@
 [![Transformers](https://img.shields.io/badge/Transformers-4.55+-ffb71b.svg)](https://huggingface.co/docs/transformers)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.33+-ff4b4b.svg)](https://streamlit.io/)
-[![Tests](https://img.shields.io/badge/tests-23%20passed-success.svg)](#테스트)
+[![Tests](https://img.shields.io/badge/tests-31%20passed-success.svg)](#테스트)
 
 ---
 
@@ -176,7 +176,7 @@ VLM/
 
 ## 🧪 테스트
 
-**단위 테스트: 23/23 통과** (2026-04-27 기준)
+**단위 테스트: 31/31 통과** (2026-04-27 기준)
 
 | 파일 | 대상 | 테스트 수 |
 |---|---|---|
@@ -184,6 +184,8 @@ VLM/
 | `tests/test_api_schemas.py` | `ReportRequest`/`Response` | 7 |
 | `tests/test_config.py` | config 로더 | 3 |
 | `tests/test_json_extraction.py` | brace-balanced JSON 파서 | 8 |
+| `tests/test_auth.py` | X-API-Key 인증 | 4 |
+| `tests/test_logging.py` | JSON 구조적 로깅 | 4 |
 
 ```bash
 pytest tests/                # 기본 실행 (integration 제외)
@@ -214,10 +216,23 @@ curl http://localhost:8000/v1/health
 ```bash
 curl -X POST http://localhost:8000/v1/report \
      -H "Content-Type: application/json" \
+     -H "X-API-Key: YOUR_KEY" \
      -d @vlm/schema/samples/normal_case.json
 ```
 
 **검증된 추론 시간**: 20~34초 (4샘플 평균 27초, lifespan 모델 사전 로드)
+
+### 보안 / 운영 기능
+
+| 기능 | 동작 |
+|---|---|
+| **X-API-Key 인증** | `config.api.api_keys` 배열 비어있으면 비활성화 (개발 모드) |
+| **Rate limiting** | 분당 N회 (`config.api.rate_limit_per_minute`, 기본 60), 초과 시 429 |
+| **추론 타임아웃** | `config.api.inference_timeout_sec` (기본 180초), 초과 시 504 |
+| **CORS 화이트리스트** | `config.api.allowed_origins` 명시 출처만 |
+| **경로 traversal 차단** | `result_image_path` 가 `image_dir` 외부면 403 |
+| **JSON 구조적 로깅** | request_id, latency, status_code 등 자동 기록 |
+| **요청 추적** | 응답에 `X-Request-ID` 헤더 포함 |
 
 응답:
 ```json

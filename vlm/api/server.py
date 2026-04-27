@@ -23,16 +23,27 @@
 #        -d @vlm/schema/samples/normal_case.json
 #
 # 설정 (config.json):
-#   api.host             : 바인딩 호스트 (기본: 0.0.0.0)
-#   api.port             : 바인딩 포트 (기본: 8000)
-#   paths.lora_adapter   : LoRA 어댑터 경로 (없으면 베이스 모델로 추론)
+#   api.host                  : 바인딩 호스트 (기본: 0.0.0.0)
+#   api.port                  : 바인딩 포트 (기본: 8000)
+#   api.allowed_origins       : CORS 화이트리스트
+#   api.api_keys              : X-API-Key 인증 (빈 배열이면 비활성화)
+#   api.rate_limit_per_minute : 분당 요청 제한 (기본 60)
+#   api.inference_timeout_sec : 추론 타임아웃 (기본 180초)
+#   paths.lora_adapter        : LoRA 어댑터 경로 (없으면 베이스 모델로 추론)
+#   logging.level             : DEBUG / INFO / WARNING
+#   logging.format            : json / text
+#
+# 보안:
+#   X-API-Key: api_keys 배열에 키 등록 시 인증 필수, 없으면 401
+#   Rate limit: 분당 N회 초과 시 429 (slowapi)
+#   경로 traversal: result_image_path 가 image_dir 외부면 403
 #
 # 전제 조건:
 #   GPU 필수 (RTX 4090 권장, 최소 16GB VRAM)
 #   프로젝트 루트에 config.json 존재
 #
 # 의존성:
-#   fastapi, uvicorn, pydantic>=2.0
+#   fastapi, uvicorn, pydantic>=2.0, slowapi, python-json-logger
 # =============================================================================
 
 from __future__ import annotations
@@ -40,6 +51,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -49,12 +61,23 @@ _ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+from starlette.responses import JSONResponse
 
+from vlm.api.auth import is_auth_enabled, verify_api_key
 from vlm.api.schemas import ReportRequest, ReportResponse
-from vlm.schema.thema_pa_output import ThemaPAOutput, ErrorCode, BackboneSlope
 from vlm.config import CFG
+from vlm.logging_config import configure_from_config, get_logger
+from vlm.schema.thema_pa_output import ThemaPAOutput, ErrorCode, BackboneSlope
+
+# 로깅 초기화 (config.json 기반)
+configure_from_config()
+log = get_logger("vlm.api")
 
 ADAPTER_PATH = Path(__file__).parent.parent.parent / CFG.paths.lora_adapter
 
@@ -75,10 +98,17 @@ def _load_model_sync():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    log.info("API 부팅: 모델 로드 시작")
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, _load_model_sync)
+    log.info("API 준비 완료", extra={"model_used": _model_used, "adapter_exists": ADAPTER_PATH.exists()})
     yield
+    log.info("API 종료")
 
+
+# Rate Limiter
+_RATE_LIMIT = getattr(CFG.api, "rate_limit_per_minute", 60)
+limiter = Limiter(key_func=get_remote_address, default_limits=[f"{_RATE_LIMIT}/minute"])
 
 app = FastAPI(
     title="Livestock VLM API",
@@ -86,13 +116,47 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    log.warning("Rate limit exceeded", extra={"client": get_remote_address(request), "path": request.url.path})
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit 초과 ({_RATE_LIMIT}/min). 잠시 후 재시도하세요."},
+    )
+
+
+# 요청 로깅 미들웨어
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    request_id = uuid.uuid4().hex[:8]
+    start = time.time()
+    response = await call_next(request)
+    elapsed_ms = round((time.time() - start) * 1000, 1)
+    log.info(
+        f"{request.method} {request.url.path}",
+        extra={
+            "request_id":  request_id,
+            "method":      request.method,
+            "path":        request.url.path,
+            "status_code": response.status_code,
+            "elapsed_ms":  elapsed_ms,
+            "client":      get_remote_address(request),
+        },
+    )
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 
 _cors_origins = getattr(CFG.api, "allowed_origins", None) or ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["*", "X-API-Key"],
 )
 
 _INFERENCE_TIMEOUT = getattr(CFG.api, "inference_timeout_sec", 180)
@@ -144,11 +208,14 @@ def health():
         "status": "ready" if _model_ready else "loading",
         "model_used": _model_used,
         "adapter_exists": ADAPTER_PATH.exists(),
+        "auth_enabled": is_auth_enabled(),
+        "rate_limit_per_minute": _RATE_LIMIT,
     }
 
 
-@app.post("/v1/report", response_model=ReportResponse)
-async def generate_report(req: ReportRequest):
+@app.post("/v1/report", response_model=ReportResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit(f"{_RATE_LIMIT}/minute")
+async def generate_report(request: Request, req: ReportRequest):
     if not _model_ready:
         raise HTTPException(status_code=503, detail="모델 로딩 중입니다. /v1/health 로 상태 확인 후 재시도하세요.")
 
@@ -172,6 +239,16 @@ async def generate_report(req: ReportRequest):
             detail=f"추론 타임아웃 ({_INFERENCE_TIMEOUT}초 초과)",
         )
     elapsed = round(time.time() - t0, 2)
+
+    log.info(
+        "report generated",
+        extra={
+            "carcass_no":  req.carcass_no,
+            "grade":       req.grade,
+            "elapsed_sec": elapsed,
+            "model":       _model_used,
+        },
+    )
 
     return ReportResponse(
         summary=result.get("3문장_요약", ""),

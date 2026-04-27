@@ -393,9 +393,10 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] Dockerfile + docker-compose — GPU 컨테이너 + 모델 가중치 볼륨 마운트
 - [x] 데이터셋 분석 노트북 (등급 분포, 측정값 히스토그램) — `notebooks/dataset_analysis.{py,md}` + 7장 figures
 - [x] Makefile — 공통 명령 모음
+- [x] **API 인증 (X-API-Key)** — `vlm/api/auth.py`, 4 테스트 통과
+- [x] **구조적 로깅 (JSON)** — `vlm/logging_config.py`, request_id/latency 자동 기록
+- [x] **Rate limiting (slowapi)** — 분당 N회 제한, 429 응답
 - [ ] 모델 양자화 (INT4) — VRAM 24GB → 6GB (Day 3)
-- [ ] API 인증 (`X-API-Key`) (Day 3)
-- [ ] 구조적 로깅 (Python `logging` JSON) (Day 3)
 
 ### 운영 전 필요 작업
 - [ ] DB 비밀번호 변경 (이전 노출 대응)

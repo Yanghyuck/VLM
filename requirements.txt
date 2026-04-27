@@ -8,6 +8,8 @@ anthropic>=0.25
 # FastAPI 서버
 fastapi>=0.110
 uvicorn>=0.29
+slowapi>=0.1.9                 # rate limiting
+python-json-logger>=2.0        # JSON 구조적 로깅
 
 # Streamlit 데모
 streamlit>=1.33
@@ -27,3 +29,4 @@ rouge-score>=0.1
 
 # 테스트
 pytest>=8.0
+pytest-asyncio>=1.0
