@@ -1,8 +1,9 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-04-28 (Plan C 완료 — 운영 준비도 포함)
-**현재 브랜치**: `local-vlm-train`
+**최종 업데이트**: 2026-04-28 (v1.0.0 릴리스, main 동기화 완료)
+**현재 브랜치**: `main` (default), `local-vlm-train` (개발)
 **리포지토리**: https://github.com/Yanghyuck/VLM
+**릴리스**: [`v1.0.0`](https://github.com/Yanghyuck/VLM/releases/tag/v1.0.0)
 
 ---
 
@@ -61,6 +62,8 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 | 3주차 | Streamlit 데모 + FastAPI 서빙 + 중앙 설정 + 추론 검증 | ✅ 완료 | 2026-05-12 |
 | 3.5주차 | v2 재학습 (Vision LoRA + AI 이미지, held-out 50건) | ✅ 완료 | 2026-04-27 |
 | 4주차 | 3-way 벤치마크 (Base / v1 / v2) + 결과 분석 | ✅ 완료 | 2026-04-27 |
+| Plan C | 양자화 + 환경변수 override + CHANGELOG + main 머지 | ✅ 완료 | 2026-04-28 |
+| **v1.0.0** | **`main` 동기화 + `v1.0.0` 태그 푸시** | ✅ 완료 | 2026-04-28 |
 
 ---
 
@@ -329,6 +332,7 @@ VLM/
 ├── PROGRESS.md                       ← 본 문서
 ├── README.md
 ├── ARCHITECTURE.md
+├── CHANGELOG.md                      ← 버전별 변경 이력
 │
 ├── .github/workflows/ci.yml          ← GitHub Actions CI
 │
@@ -402,9 +406,11 @@ VLM/
 
 | 브랜치 | 용도 | 최신 커밋 |
 |---|---|---|
-| `main` | 1주차 결과 (스키마 + DB/이미지 매칭) | `79ac217` |
-| `claude` | 2주차 Claude API 버전 | `9541782` |
-| `local-vlm-train` | 2주차 + 3주차 (Qwen3-VL LoRA) | `29116f3` |
+| `main` | **default 브랜치 (1~4주차 + Plan C 모두 반영)** | `7015c92` |
+| `local-vlm-train` | 개발 브랜치 (main 과 동일 상태) | `7015c92` |
+| `claude` | 2주차 Claude API 버전 (참고용 보관) | `9541782` |
+
+**태그**: `v1.0.0` ([릴리스 페이지](https://github.com/Yanghyuck/VLM/releases/tag/v1.0.0))
 
 ---
 
