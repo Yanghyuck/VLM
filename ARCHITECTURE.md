@@ -1,8 +1,9 @@
 # 한국어 축산 AI 판정 코파일럿 — 아키텍처
 
-> 최종 업데이트: 2026-04-27
+> 최종 업데이트: 2026-04-28 (v1.0.0 릴리스)
 > 기반 코드: `thema_pa` (YOLOv11 기반 돼지 도체 분석 시스템)
 > 메인 엔진: **Qwen3-VL-8B-Instruct + LoRA 파인튜닝** (로컬 추론)
+> 릴리스: [`v1.0.0`](https://github.com/Yanghyuck/VLM/releases/tag/v1.0.0) — `main` 브랜치 동기화 완료
 
 ---
 
@@ -91,6 +92,27 @@ CFG.grade.backfat_range      # 등급별 정상 범위
 ```
 
 `config.json` 은 `.gitignore` 로 제외되며 실제 값은 `config.example.json` 을 복사해 생성.
+
+#### 환경변수 override (운영 보안)
+
+운영 환경에서는 비밀번호 등 민감 정보를 `config.json` 에 평문 저장하지 않고
+환경변수로 주입. 환경변수가 있으면 `config.json` 값을 자동 덮어씀.
+
+| 환경변수 | 덮어쓰는 키 | 캐스팅 |
+|---|---|---|
+| `VLM_DB_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_NAME` | `db.*` | str / int |
+| `VLM_API_HOST` / `_PORT` | `api.host` / `api.port` | str / int |
+| `VLM_API_KEYS` | `api.api_keys` | csv → list |
+| `VLM_LORA_ADAPTER` / `VLM_IMAGE_DIR` | `paths.*` | str |
+| `VLM_LOG_LEVEL` / `VLM_LOG_FORMAT` | `logging.*` | str |
+
+```bash
+# 운영 배포 예시
+export VLM_DB_PASSWORD="real_secret"
+export VLM_API_KEYS="prod-key-1,prod-key-2"
+python vlm/api/server.py
+# → [config] env overrides applied: VLM_DB_PASSWORD, VLM_API_KEYS
+```
 
 ### 2.3 로컬 추론 — `vlm/train/inference.py`
 
@@ -396,7 +418,7 @@ llamafactory-cli train vlm/train/qwen3vl_lora_v2.yaml
 
 ## 7. 테스트 전략
 
-**6개 파일, 31개 테스트, 모두 통과 (2026-04-27 기준)**
+**7개 파일, 38개 테스트, 모두 통과 (2026-04-28 기준)**
 
 ```
 tests/
@@ -405,7 +427,8 @@ tests/
 ├── test_config.py          # config.py 로더 (3)
 ├── test_json_extraction.py # brace-balanced JSON parser (8)
 ├── test_auth.py            # X-API-Key 인증 (4, asyncio)
-└── test_logging.py         # JSON 구조적 로깅 (4)
+├── test_logging.py         # JSON 구조적 로깅 (4)
+└── test_env_override.py    # 환경변수 config override (7)
 ```
 
 ```bash
