@@ -231,19 +231,20 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 
 ---
 
-## INT4 양자화 (NF4) 평가 ⚠️
+## 양자화 종합 평가 (3 방식)
 
-| 항목 | bf16 (기본) | INT4 NF4 | 변화 |
-|---|---|---|---|
-| VRAM | ~17~22 GB | **6.75 GB** | -70% ⭐ |
-| 추론 시간 | 22~50초 | 46~112초 | +50~120% ⚠️ |
-| 정상 케이스 품질 | 우수 | 우수 | OK |
-| 오류 케이스 품질 | 우수 | **저하** (반복, 모순) | ⚠️ |
+| 방식 | VRAM | 추론 시간 | 정상 케이스 | 오류 케이스 | 권장 |
+|---|---|---|---|---|---|
+| **bf16 (기본)** | 22 GB | 26초 | ⭐ | ⭐ | ✅ 운영 |
+| **INT8 (bitsandbytes)** | 10.15 GB (-54%) | 96초 (3.7×) | ✅ | ⚠️ 환각 일부 | 16GB 미만 GPU |
+| **NF4 (bitsandbytes)** | 6.75 GB (-69%) | 70초 (2.7×) | ✅ | ❌ 반복·모순 | 엣지/정상 케이스만 |
+| GPTQ 4-bit | — | — | — | — | ❌ Windows+Py3.13 호환 한계 |
+| AWQ 4-bit | — | — | — | — | ❌ 동일 한계 |
 
-**결론**: 운영 서비스에는 bf16 권장. INT4 는 엣지 디바이스 + 정상 케이스 위주에서만 사용.
+**결론**: 운영에는 bf16 권장. 메모리 제약 시 INT8 우선, NF4 는 정상 케이스만.
+GPTQ/AWQ 는 Linux+Py3.11 환경에서 재평가 필요.
+
 상세 분석: [`vlm/train/quantization_report.md`](vlm/train/quantization_report.md)
-
-향후 개선 후보: GPTQ / AWQ / GGUF / 작은 모델 (Qwen3-VL-2B 등)
 
 ---
 
@@ -521,7 +522,8 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] **API 인증 (X-API-Key)** — `vlm/api/auth.py`, 4 테스트 통과
 - [x] **구조적 로깅 (JSON)** — `vlm/logging_config.py`, request_id/latency 자동 기록
 - [x] **Rate limiting (slowapi)** — 분당 N회 제한, 429 응답
-- [x] **모델 양자화 (INT4 NF4)** — VRAM 22GB → 6.75GB (-70%), 품질 trade-off 문서화
+- [x] **모델 양자화 (INT4 NF4 + INT8 bitsandbytes)** — VRAM 22GB → 6.75GB / 10.15GB
+- [x] **GPTQ/AWQ 4-bit 시도 + 환경 호환 한계 정직 문서화** (Windows+Py3.13+transformers 5.x stack 제약)
 
 ### 운영 전 필요 작업
 - [ ] DB 비밀번호 변경 (이전 노출 대응 — 사용자 수동 작업)

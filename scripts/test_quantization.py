@@ -1,11 +1,12 @@
 # =============================================================================
 # scripts/test_quantization.py
 # -----------------------------------------------------------------------------
-# 양자화(INT4 NF4) 모델 동작 검증 + VRAM 사용량 측정.
-# 3개 샘플 추론 후 결과를 vlm/train/quantization_test_results.md 에 저장.
+# 양자화(INT8 / INT4 NF4) 모델 동작 검증 + VRAM 사용량 측정.
+# 3개 샘플 추론 후 결과를 quantize_mode 별 markdown 파일에 저장.
 #
 # 동작 방법:
 #   1. config.json 의 model.quantize 를 true 로 일시 변경
+#      + model.quantize_mode 를 "int8" 또는 "nf4" 로 설정
 #   2. python scripts/test_quantization.py
 #   3. 검증 후 quantize 를 다시 false 로 되돌리기
 # =============================================================================
@@ -24,7 +25,7 @@ from vlm.config import CFG
 from vlm.schema.thema_pa_output import ThemaPAOutput
 from vlm.train.inference import generate_report, QUANTIZE, QUANTIZE_MODE
 
-OUTPUT_FILE = ROOT / "vlm" / "train" / "quantization_test_results.md"
+OUTPUT_FILE = ROOT / "vlm" / "train" / f"quantization_test_results_{CFG.model.quantize_mode}.md"
 
 SAMPLES = [
     "vlm/schema/samples/normal_case.json",
