@@ -263,11 +263,12 @@ GET  /docs  — Swagger UI 자동 생성
 |---|---|---|
 | **X-API-Key 인증** | `vlm/api/auth.py` 의 `verify_api_key` Depends | 401 |
 | **Rate limiting** | `slowapi` Limiter, 분당 N회 | 429 |
-| **추론 타임아웃** | `asyncio.wait_for(timeout=180)` | 504 |
+| **추론 타임아웃** | `asyncio.wait_for(timeout=240)` | 504 |
 | **경로 traversal 차단** | `result_image_path` 를 `image_dir` 하위로 제한 | 403 |
 | **CORS 화이트리스트** | `config.api.allowed_origins` | — |
 | **이벤트 루프 블로킹 방지** | `run_in_executor` 로 추론 위임 | — |
 | **모델 로드 상태 표시** | `_model_ready` 플래그 → `/v1/health` 반영 | 503 |
+| **lifespan warm-up 추론** | `_warmup_model_sync()` (dummy 입력 1회). 첫 사용자 요청 6배 가속 | — |
 
 ### 관측성 (Observability)
 
@@ -313,6 +314,46 @@ curl -X POST http://localhost:8000/v1/report \
      -H "X-API-Key: my-secret-key-123" \
      -d @vlm/schema/samples/normal_case.json
 ```
+
+### 5.1 thema_pa_VLM 운영 연동 (5주차)
+
+YOLO 도체 분석이 끝난 직후 `thema_pa_VLM` (운영 통합용 사본 리포) 이
+VLM API 를 직접 호출해 한국어 리포트를 받아 저장합니다. 도체 단위
+실시간 흐름이며, 시스템 통합용 별도 큐/배치 없이 동기 호출 방식.
+
+```
+thema_pa_VLM (YOLOv11)
+    │
+    │  ① 도체 분석 결과 → ThemaPAOutput JSON 페이로드
+    ▼
+RestAPI.SendVLMReport(payload)              [thema_pa_VLM/comm/rest_api.py]
+    │
+    │  ② POST http://127.0.0.1:8000/v1/report
+    ▼
+VLM FastAPI
+    │  ③ ReportRequest Pydantic 검증
+    │  ④ _validate_image_path() — image_dir 하위 + 파일 존재
+    │  ⑤ _build_thema_output() — ThemaPAOutput 변환
+    │  ⑥ generate_report() — Qwen3-VL + v2 LoRA 추론 (warmed-up, ~25s)
+    │  ⑦ JSON 4 필드 응답 (summary/grade_reason/warnings/recommendation)
+    ▼
+thema_pa_VLM
+    │  ⑧ validate_vlm_response_json() — 4 필드 검증
+    │  ⑨ save_vlm_response_json() — ./storage/vlm_reports/{ymd}_{pigno}_vlm_report.json
+    ▼
+    thema_pa_VLM/storage/vlm_reports/20260422_3473_vlm_report.json
+```
+
+**VLM 측 지원**:
+- `scripts/export_from_db.py` — AI/ORI 파일명 정규식으로 도체번호 → 이미지 경로 자동 매칭
+- `tests/test_thema_pa_vlm_bridge.py` — 5건 (모킹 기반, `THEMA_PA_ROOT` 환경변수)
+- `scripts/test_e2e_thema_pa_bridge.py` — 4건 실호출 검증 (warm-up + timeout 240 후 4/4 PASS, 평균 25.5s)
+
+**검증된 운영 안정성** (E2E, RTX 4090, v2 LoRA):
+| 시나리오 | 첫 호출 | 평균 |
+|---|---|---|
+| cold start (warm-up 없음) | 128.9s, 1건 timeout | 91s |
+| **lifespan warm-up + timeout 240** | **20.5s** | **25.5s** |
 
 ---
 
@@ -530,11 +571,27 @@ pytest tests/
 - [x] `config.json` 중앙 설정 + `vlm/config.py` 로더
 - [x] 보안 강화 (git 히스토리 비밀번호 제거, CORS, 경로 검증, 타임아웃)
 - [x] 테스트 23개 추가
-- [ ] 학습 완료 모델로 데모/API 실제 동작 확인
+- [x] 학습 완료 모델로 데모/API 실제 동작 확인 (4/4 200 OK)
 
-### 4주차 — 벤치마크 + 문서화 ⏳
-- [ ] 평가 샘플 50~100건 수집 (train 제외)
-- [ ] 레퍼런스 답변 작성
-- [ ] `vlm/bench/scorer.py` (ROUGE / BERTScore)
-- [ ] 실패 케이스 사례 문서화
-- [ ] README + 포트폴리오 설명 페이지
+### 4주차 — 벤치마크 + 문서화 ✅
+- [x] 평가 샘플 50건 held-out 수집 (학습 제외)
+- [x] `vlm/bench/runner.py` + `scorer.py` (ROUGE-L / BERTScore ko / 4종 정확도)
+- [x] 3-way 벤치마크 (Base / v1 / v2): v2 ROUGE-L +26%, BERTScore +14%, 50/50 우월
+- [x] 실패 케이스 정성 분석 (`vlm/bench/failure_analysis.md`)
+- [x] INT4 NF4 / INT8 양자화 평가 (`vlm/train/quantization_report.md`)
+- [x] README/PROGRESS/ARCHITECTURE 통합 문서
+
+### v1.0.0 릴리스 ✅ (2026-04-28)
+- [x] `main` 동기화 + `v1.0.0` 태그 + GitHub Release
+- [x] 환경변수 override (12 변수) + CHANGELOG.md
+
+### 5주차 — thema_pa_VLM ↔ VLM 운영 통합 ✅ (2026-05-08)
+- [x] `thema_pa_VLM/comm/rest_api.py` — `SendVLMReport` / `validate/save_vlm_response_json`
+- [x] `thema_pa_VLM/config.json` — `vlm_api` 블록
+- [x] `scripts/export_from_db.py` — 도체번호 → AI/ORI 이미지 자동 매칭
+- [x] `tests/test_thema_pa_vlm_bridge.py` — 5건 모킹 통합 테스트
+- [x] `scripts/test_e2e_thema_pa_bridge.py` — 4건 실호출 E2E
+- [x] **lifespan warm-up + inference_timeout 240** — 4/4 PASS, 평균 25.5s/req
+- [x] `requirements.txt` 에 `numpy<2.3` 핀 (opencv 호환)
+- [ ] 응답 품질 보강 (한국어 조사 정규화, 등급 정합성) — 다음 학습 사이클
+- [ ] CHANGELOG 5주차 항목 + 원격 푸시 + `v1.1.0` 태그

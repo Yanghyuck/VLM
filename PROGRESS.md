@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-05-08 (thema_pa ↔ VLM 브릿지 통합)
+**최종 업데이트**: 2026-05-08 (5주차 thema_pa_VLM 통합 + lifespan warm-up + E2E 4/4)
 **현재 브랜치**: `main` (default), `local-vlm-train` (개발)
 **리포지토리**: https://github.com/Yanghyuck/VLM
 **릴리스**: [`v1.0.0`](https://github.com/Yanghyuck/VLM/releases/tag/v1.0.0)
@@ -639,6 +639,37 @@ curl -X POST http://localhost:8000/v1/report \
 - [ ] HTTPS 리버스 프록시 (사용자 환경 의존)
 - [ ] Sentry/PagerDuty 알림 (선택)
 - [x] **CHANGELOG.md** — 버전별 변경 이력 + 결정 이력
+
+## 다음 세션 시작점 (2026-05-08 기준)
+
+작업 트리 clean. 7 커밋 미푸시 (origin/main 미반영). 다음 세션 진입 시 이 섹션부터 확인.
+
+### 우선순위 1 — 5주차 마무리 (가벼움)
+- [ ] **C1**: `CHANGELOG.md` `[Unreleased]` 아래에 5주차 + E2E + warm-up 항목 추가
+- [ ] **D1**: `git push origin main` (현재 7 커밋 미푸시: `e6e6111`, `b81717d`, `02d5680`, `a63a4a1`, `92ddb6e`, `429e60b`, `93a2981`)
+- [ ] **D2**: `v1.1.0` 태그 + GitHub Release 노트 (5주차 통합 + warm-up + numpy 핀)
+
+### 우선순위 2 — 응답 품질 (재학습/후처리, 무거움)
+- [ ] **A3**: 한국어 조사 정규화 — "거세으로" → "거세로", "1+으로 처리" → "1+로 처리". 학습 데이터 패턴 문제라 다음 학습 사이클 또는 응답 후처리 필터.
+- [ ] **A4**: 등급 정합성 — 입력 `grade="등외"` 인데 모델이 "2 등급으로 판정" 출력. 학습 강화 또는 후처리에서 입력 grade 강제 주입.
+
+### 우선순위 3 — 운영 보강 (선택)
+- [ ] **B2**: `thema_pa_VLM` 의 `save_vlm_response_json` 절대경로화 (현재 cwd 의존)
+- [ ] **D3**: DB 비밀번호 변경 (사용자 수동, 이전 노출 사고 대응)
+- [ ] HTTPS 리버스 프록시 / Prometheus `/metrics` / Sentry — 운영 환경 의존
+
+### 이번 세션에서 완료한 7 커밋
+```
+e6e6111  feat(api): lifespan warm-up + inference timeout 240 + numpy 호환 핀
+b81717d  test: thema_pa_VLM ↔ VLM E2E 실호출 검증 결과 (3/4 PASS, v2)
+02d5680  feat(scripts): thema_pa_VLM ↔ VLM E2E 검증 스크립트
+a63a4a1  refactor: 연동 대상 폴더를 thema_pa → thema_pa_VLM 으로 전환
+92ddb6e  docs: PROGRESS/README 에 5주차 thema_pa 통합 반영
+429e60b  feat(integration): thema_pa ↔ VLM 브릿지 통합 테스트
+93a2981  feat(scripts): export_from_db 이미지 경로 자동 매칭
+```
+
+---
 
 ### 5주차 — thema_pa 시스템 통합 ✅
 - [x] `thema_pa_VLM/config.json` 에 `vlm_api` 블록 (url / timeout / output_dir)
