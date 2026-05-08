@@ -658,7 +658,12 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] `generate_report(..., postprocess=True)` 인자 (기본 ON)
 - [x] **학습 데이터 근본 수정** — `convert_dataset.py:_eul_ro` 헬퍼로 조사 자동 처리, 성별 라벨 `암퇘지/수퇘지/거세` → `암컷/수컷/거세` 통일. `livestock_train.json` 재생성 시 어색 패턴 3,305건 → 0건.
 - [x] 단위 테스트 34건 추가 (test_postprocess 18 + test_convert_dataset 16). 전체 77/77 PASS.
-- [ ] **재학습 시작 (사용자 승인 대기)** — `qwen3vl_lora_v2.yaml` 로 재실행 (~5시간). 재학습 후 v1 vs v2-corrected 벤치마크 권장.
+- [~] **재학습 진행 중** (2026-05-08 시작, ~5시간 예상)
+  - 출력 디렉터리: `vlm/train/output/qwen3vl-lora/` (이전 v2 어댑터는 `qwen3vl-lora-v2-prejosa/` 로 백업)
+  - 데이터: `livestock_train.json` 6,610 샘플 (held-out 50, 어색 조사 0건)
+  - YAML: `qwen3vl_lora_v2.yaml` (Vision Tower LoRA + AI 이미지, 3 epoch)
+  - 로그: `vlm/train/training_v2_corrected.log`
+  - 다음 세션 시작 시 학습 종료 확인 → v1 vs v2-corrected 벤치마크
 
 ### 우선순위 2 — 응답 품질 (재학습/후처리, 무거움)
 - [ ] **A3**: 한국어 조사 정규화 — "거세으로" → "거세로", "1+으로 처리" → "1+로 처리". 학습 데이터 패턴 문제라 다음 학습 사이클 또는 응답 후처리 필터.
