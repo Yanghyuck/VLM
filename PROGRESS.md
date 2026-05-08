@@ -389,7 +389,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 
 ## 테스트 현황
 
-**최종 결과: 43/43 통과** (2026-05-08 기준)
+**최종 결과: 61/61 통과** (2026-05-08 기준, 우선순위 2 후처리 적용 후)
 
 | 파일 | 테스트 수 | 대상 |
 |---|---|---|
@@ -401,6 +401,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 | `tests/test_logging.py` | 4 | JSON 구조적 로깅 |
 | `tests/test_env_override.py` | 7 | 환경변수 config override |
 | `tests/test_thema_pa_vlm_bridge.py` | 5 | thema_pa ↔ VLM 브릿지 (THEMA_PA_ROOT 미존재 시 skip) |
+| `tests/test_postprocess.py` | 18 | A3 조사 정규화 + A4 등급 정합성 + 통합 |
 
 **End-to-End 검증 스크립트**
 
@@ -649,6 +650,13 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] **D1**: `git push origin local-vlm-train` (메모리 규칙: main 직접 푸시 금지)
 - [x] **D2-tag**: `v1.1.0` 태그 생성 + 푸시 완료
 - [ ] **D2-release**: GitHub Release 페이지 — 보류 (gh CLI 미설치, 필요 시 웹 UI 또는 winget 설치 후 진행)
+
+### 우선순위 2 — 응답 품질 후처리 ✅ (이번 세션 완료, 후처리 한정)
+- [x] **A3**: 한국어 조사 정규화 — `vlm/postprocess.py` (`거세으로→거세로`, `1+으로→1+로`, `등외으로→등외로`, `2으로→2로`)
+- [x] **A4**: 등급 정합성 — 입력 `grade` 와 다른 등급 단언("최종 2 등급", "X 등급으로 판정")을 입력 grade 로 강제 교체. 비교 문맥은 보존.
+- [x] `tests/test_postprocess.py` — 18 단위 테스트 (정상 텍스트 미변경 + 비교 문맥 보존 회귀 포함). 전체 61/61 PASS.
+- [x] `generate_report(..., postprocess=True)` 인자 추가 (기본 ON)
+- [ ] 학습 사이클을 통한 근본 해결 — 다음 학습 시 데이터 패턴 보강으로 후처리 의존도 축소
 
 ### 우선순위 2 — 응답 품질 (재학습/후처리, 무거움)
 - [ ] **A3**: 한국어 조사 정규화 — "거세으로" → "거세로", "1+으로 처리" → "1+로 처리". 학습 데이터 패턴 문제라 다음 학습 사이클 또는 응답 후처리 필터.

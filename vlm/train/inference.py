@@ -164,6 +164,7 @@ def generate_report(
     output: ThemaPAOutput,
     use_adapter: bool = True,
     adapter_path: str | None = None,
+    postprocess: bool = True,
 ) -> dict:
     """ThemaPAOutput → 한국어 판정 리포트 dict.
 
@@ -171,6 +172,7 @@ def generate_report(
         output: 도체 판정 결과
         use_adapter: True 면 LoRA 어댑터 적용, False 면 베이스 모델만 사용 (벤치마크용)
         adapter_path: 사용할 어댑터 경로 (None 이면 config 기본값)
+        postprocess: True 면 vlm.postprocess.apply_postprocess 적용 (A3 조사 정규화 + A4 등급 정합성)
 
     반환 형식:
         {
@@ -243,4 +245,8 @@ def generate_report(
     generated = output_ids[:, inputs["input_ids"].shape[1]:]
     response  = _processor.batch_decode(generated, skip_special_tokens=True)[0]
 
-    return _extract_json(response)
+    parsed = _extract_json(response)
+    if postprocess:
+        from vlm.postprocess import apply_postprocess
+        parsed = apply_postprocess(parsed, expected_grade=output.grade)
+    return parsed

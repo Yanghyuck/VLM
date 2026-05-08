@@ -7,9 +7,17 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+### Added — 응답 품질 후처리 (A3/A4)
+- `vlm/postprocess.py` — LoRA 응답 dict 한국어 후처리 (순수 파이썬, 학습 무관 즉시 적용)
+  - **A3 한국어 조사 정규화**: "거세으로" → "거세로", "1+으로" → "1+로", "등외으로" → "등외로", "2으로" → "2로"
+  - **A4 등급 정합성**: 입력 `grade` 와 다른 등급 단언("최종 2 등급", "X 등급으로 판정")을 입력 grade 로 강제 교체. 비교 문맥("1+ 등급 도체 대비")은 보존.
+  - 변경 발생 시 `_postprocess` 메타필드(`josa_normalized` / `grade_enforced`)에 흔적 기록
+- `vlm/train/inference.py` — `generate_report(..., postprocess=True)` 인자 추가 (기본 ON, 벤치마크용 OFF 가능)
+- `tests/test_postprocess.py` — 단위 테스트 18건 (정상 텍스트 미변경 + 비교 문맥 보존 회귀 포함)
+
 ### 향후 계획
-- 한국어 조사 정규화 후처리 (예: "거세으로" → "거세로", "1+으로" → "1+로")
-- 등급 정합성 보강 (입력 `grade="등외"` → 모델이 "2 등급" 반환하는 케이스)
+- 한국어 조사 정규화 — 후처리 외 학습 데이터 패턴 보강 (다음 학습 사이클)
+- 등급 정합성 — 학습 강화로 후처리 의존도 감소
 - `thema_pa_VLM/save_vlm_response_json` 절대경로화 (현재 cwd 의존)
 - 데이터 추가 수집 (다른 도축장, 다른 일자, 등외 케이스 포함)
 - GPTQ / AWQ 양자화 재시도 (NF4 대비 품질 보존 기대)
