@@ -309,6 +309,7 @@ pytest tests/ -m integration # 통합 테스트만 (실제 모델/DB 필요)
 | `scripts/test_inference.py` | 학습된 LoRA 어댑터 추론 (3샘플) | ✅ 3/3 |
 | `scripts/test_demo_pipeline.py` | Streamlit 데모 동일 코드 경로 (4샘플) | ✅ 4/4 |
 | `scripts/test_api.py` | FastAPI `/v1/health` + `/v1/report` (4샘플) | ✅ 4/4 |
+| `scripts/test_e2e_thema_pa_bridge.py` | **thema_pa_VLM `SendVLMReport` 실호출 → VLM 추론 → 저장 파일 검증** | 운영 흐름 |
 
 ---
 

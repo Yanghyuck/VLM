@@ -321,6 +321,29 @@ tests/test_thema_pa_vlm_bridge.py    ✅ 5/5 PASSED (0.72s)
 - 요청: 도체번호 3473, 등급 1+, 등지방 20mm, 자동 매칭된 AI 이미지 경로
 - 응답: `summary`, `grade_reason`, `warnings`, `recommendation`, `model_used="lora (25.57s)"`
 
+### E2E 검증 스크립트 — `scripts/test_e2e_thema_pa_bridge.py`
+
+통합 테스트는 `requests.post` 를 모킹하지만, E2E 스크립트는 실제 네트워크 호출 +
+모델 추론까지 수행해 운영 흐름을 검증한다.
+
+```bash
+# 1. VLM FastAPI 가동 (별도 셸)
+conda activate vlm
+python vlm/api/server.py
+
+# 2. E2E 검증 (메인 셸)
+python scripts/test_e2e_thema_pa_bridge.py
+```
+
+검증 단계:
+1. `GET /v1/health` → 200 + `status="ready"`
+2. `thema_pa_VLM/comm/rest_api.py` 의 `RestAPI` 클래스 로드 + `config.json` 의 `vlm_api` 블록 확인
+3. 4개 샘플 페이로드로 `RestAPI(config).SendVLMReport(payload)` 실호출
+4. 응답 검증: HTTP 200, JSON 4 필드 (`summary` / `grade_reason` / `warnings` / `recommendation`)
+5. 저장 파일 검증: `thema_pa_VLM/storage/vlm_reports/{ymd}_{pigno}_vlm_report.json` 존재
+
+`THEMA_PA_ROOT` 환경변수로 thema_pa_VLM 경로 변경 가능.
+
 ---
 
 ## 보안 조치
@@ -386,6 +409,7 @@ tests/test_thema_pa_vlm_bridge.py    ✅ 5/5 PASSED (0.72s)
 | `scripts/test_inference.py` | LoRA 어댑터 추론 (3샘플) | ✅ 3/3 |
 | `scripts/test_demo_pipeline.py` | Streamlit 데모 동일 코드 경로 (4샘플) | ✅ 4/4 |
 | `scripts/test_api.py` | FastAPI `/v1/health` + `/v1/report` (4샘플) | ✅ 4/4 |
+| `scripts/test_e2e_thema_pa_bridge.py` | thema_pa_VLM `SendVLMReport` 실호출 + 저장 검증 (4샘플) | 사용자 환경 가동 시 실행 |
 
 ```bash
 pytest tests/
@@ -418,7 +442,8 @@ VLM/
 │   ├── export_from_db.py             ← DB → 샘플 JSON (이미지 경로 자동 매칭)
 │   ├── test_inference.py             ← 학습된 LoRA 추론 검증
 │   ├── test_demo_pipeline.py         ← Streamlit 데모 파이프라인 검증
-│   └── test_api.py                   ← FastAPI 엔드포인트 검증
+│   ├── test_api.py                   ← FastAPI 엔드포인트 검증
+│   └── test_e2e_thema_pa_bridge.py   ← thema_pa_VLM ↔ VLM 실호출 E2E 검증
 │
 ├── storage/
 │   └── vlm_reports/                  ← thema_pa → VLM 호출 결과 (gitignore, .gitkeep만 추적)
@@ -622,3 +647,5 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] **VLM 측 이미지 경로 자동 매칭** (`scripts/export_from_db.py` AI/ORI 패턴)
 - [x] **VLM 측 통합 테스트 5건** (`tests/test_thema_pa_vlm_bridge.py`)
 - [x] `storage/vlm_reports/` 디렉터리 + .gitignore 정비
+- [x] **E2E 검증 스크립트** (`scripts/test_e2e_thema_pa_bridge.py`) — 실제 네트워크 + 추론 호출 + 저장 파일 검증
+- [ ] E2E 스크립트 실제 실행 결과 (사용자 환경에서 VLM API 가동 후 1회 실행 권장)
