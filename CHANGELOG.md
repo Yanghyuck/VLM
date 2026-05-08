@@ -8,11 +8,43 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 ## [Unreleased]
 
 ### 향후 계획
+- 한국어 조사 정규화 후처리 (예: "거세으로" → "거세로", "1+으로" → "1+로")
+- 등급 정합성 보강 (입력 `grade="등외"` → 모델이 "2 등급" 반환하는 케이스)
+- `thema_pa_VLM/save_vlm_response_json` 절대경로화 (현재 cwd 의존)
 - 데이터 추가 수집 (다른 도축장, 다른 일자, 등외 케이스 포함)
 - GPTQ / AWQ 양자화 재시도 (NF4 대비 품질 보존 기대)
 - HTTPS 리버스 프록시 구성 가이드
 - Prometheus `/metrics` 엔드포인트
 - 데모 영상/GIF
+
+---
+
+## [v1.1.0] — 2026-05-08 (5주차 — thema_pa 시스템 통합)
+
+### Added — thema_pa ↔ VLM 브릿지
+- 연동 대상 폴더를 `thema_pa` → `thema_pa_VLM` 으로 전환 (원본 미수정 사본 사용)
+- `scripts/export_from_db.py` — 이미지 경로 자동 매칭 (AI / ORI 패턴, `scan_images()` map → `result_image_path` 자동 채움)
+- `tests/test_thema_pa_vlm_bridge.py` — 통합 테스트 5건 (`THEMA_PA_ROOT` 환경변수 기반, 미존재 시 skip)
+- `storage/vlm_reports/` — 호출 결과 누적 (gitignore + `.gitkeep` 만 추적)
+- `scripts/test_e2e_thema_pa_bridge.py` — 실 네트워크 + 추론 + 저장까지 검증하는 E2E 스크립트
+
+### Added — API 안정성 (lifespan warm-up)
+- `vlm/api/server.py` — `lifespan` 단계에서 더미 추론 1회 수행 (cold-start 제거)
+- `config.api.warmup_on_startup` 플래그
+- `config.api.inference_timeout_sec` 기본 180 → 240 (복잡 입력 여유)
+
+### Changed
+- `requirements.txt` — `numpy<2.3` 핀 (opencv-python 4.12 호환)
+
+### Results — E2E 실호출 검증 (v2 어댑터)
+| 회차 | 결과 | 평균 추론 | 비고 |
+|---|---|---|---|
+| 1차 (cold) | 3/4 | — | 1건 180s timeout (첫 호출 130s warm-up 영향) |
+| 2차 (warm-up + timeout 240) | **4/4** ⭐ | **25.5초/req** | 첫 호출도 20.5s 안정 |
+
+- 첫 호출 cold-start 128.9s → 20.5s (**6배 가속**)
+- 통합 테스트 5/5 + E2E 4/4 모두 PASS
+- 상세: [`vlm/api/e2e_thema_pa_bridge_results.md`](vlm/api/e2e_thema_pa_bridge_results.md)
 
 ---
 
