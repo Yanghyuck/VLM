@@ -24,3 +24,10 @@ vlm/bench/failure_analysis.log
 vlm/train/train_v2.log
 vlm/train/quantization_test.log
 vlm/train/quantization_int8.log
+
+# 로컬 실행/통합 산출물
+.tmp/
+.claude/
+run_claude.bat
+storage/vlm_reports/*.json
+!storage/vlm_reports/.gitkeep
