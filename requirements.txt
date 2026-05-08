@@ -22,6 +22,9 @@ peft>=0.18
 accelerate>=1.3
 qwen-vl-utils>=0.0.8
 
+# 호환성 핀 (opencv-python 4.12 가 numpy<2.3 요구; thema_pa_VLM 측에서 사용)
+numpy>=2.0,<2.3
+
 # 벤치마크 평가 지표
 evaluate>=0.4
 bert-score>=0.3

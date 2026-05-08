@@ -409,7 +409,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 | `scripts/test_inference.py` | LoRA 어댑터 추론 (3샘플) | ✅ 3/3 |
 | `scripts/test_demo_pipeline.py` | Streamlit 데모 동일 코드 경로 (4샘플) | ✅ 4/4 |
 | `scripts/test_api.py` | FastAPI `/v1/health` + `/v1/report` (4샘플) | ✅ 4/4 |
-| `scripts/test_e2e_thema_pa_bridge.py` | thema_pa_VLM `SendVLMReport` 실호출 + 저장 검증 (4샘플) | ✅ **3/4** (1건 client timeout, [상세](vlm/api/e2e_thema_pa_bridge_results.md)) |
+| `scripts/test_e2e_thema_pa_bridge.py` | thema_pa_VLM `SendVLMReport` 실호출 + 저장 검증 (4샘플) | ✅ **4/4** (warm-up + timeout 240, 평균 25.5s/req, [상세](vlm/api/e2e_thema_pa_bridge_results.md)) |
 
 ```bash
 pytest tests/
@@ -648,6 +648,9 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] **VLM 측 통합 테스트 5건** (`tests/test_thema_pa_vlm_bridge.py`)
 - [x] `storage/vlm_reports/` 디렉터리 + .gitignore 정비
 - [x] **E2E 검증 스크립트** (`scripts/test_e2e_thema_pa_bridge.py`) — 실제 네트워크 + 추론 호출 + 저장 파일 검증
-- [x] **E2E 실호출 검증 (v2 어댑터)** — 3/4 PASS, [`vlm/api/e2e_thema_pa_bridge_results.md`](vlm/api/e2e_thema_pa_bridge_results.md)
-  - 1건은 client 180s timeout (등외+다중 error_code, 첫 호출 warm-up 영향)
-  - sample_3473 warmed-up 후 26초/요청으로 안정 — 운영 흐름 정상 동작 확인
+- [x] **E2E 실호출 검증 (v2 어댑터)** — **4/4 PASS** (warm-up + timeout 240 적용 후), [`vlm/api/e2e_thema_pa_bridge_results.md`](vlm/api/e2e_thema_pa_bridge_results.md)
+  - 1회차 (cold): 3/4 (1건 180s timeout, 첫 호출 130s warm-up 영향)
+  - 2회차 (warm-up + timeout 240): 4/4, 평균 25.5초/req — 첫 호출도 20.5s 안정
+- [x] **API 안정성 개선**: `lifespan` warm-up 추론 + `inference_timeout_sec` 180 → 240
+  - 첫 호출 6배 가속 (128.9s → 20.5s), 복잡 입력 timeout 해결
+  - `requirements.txt` 에 `numpy<2.3` 핀 (opencv-python 4.12 호환)

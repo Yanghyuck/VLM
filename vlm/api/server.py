@@ -96,12 +96,47 @@ def _load_model_sync():
     _model_ready = True
 
 
+def _warmup_model_sync():
+    """첫 추론의 CUDA 커널 컴파일/캐싱 비용을 startup 으로 옮겨 사용자 첫 호출을 안정화.
+
+    E2E 측정 (RTX 4090, v2 LoRA): 첫 호출 ~130s → warmed-up ~25s. 이미지 없는 dummy 입력으로
+    1회 generate 만 하면 이후 사용자 요청은 안정적인 추론 시간을 가진다. 실패해도 무시.
+    """
+    if not _model_ready or _inference_module is None:
+        return
+    try:
+        dummy = ThemaPAOutput(
+            carcass_no=0,
+            slaughter_ymd="20260101",
+            backfat_average=20.0,
+            multifidus_thk=15.0,
+            body_length=70.0,
+            body_width=30.0,
+            body_weight=85.0,
+            gender=3,
+            grade="1+",
+            error_code=ErrorCode(),
+            backbone_slope=BackboneSlope(has_large_slope=False),
+            result_image_path=None,
+        )
+        t0 = time.time()
+        _inference_module.generate_report(dummy)
+        log.info(f"warm-up 추론 완료 ({time.time() - t0:.1f}s)")
+    except Exception as e:
+        log.warning(f"warm-up 추론 실패 (무시 가능): {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("API 부팅: 모델 로드 시작")
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, _load_model_sync)
     log.info("API 준비 완료", extra={"model_used": _model_used, "adapter_exists": ADAPTER_PATH.exists()})
+
+    if getattr(CFG.api, "warmup_on_startup", True):
+        log.info("warm-up 추론 시작 (CUDA 커널 캐싱)")
+        await loop.run_in_executor(None, _warmup_model_sync)
+
     yield
     log.info("API 종료")
 

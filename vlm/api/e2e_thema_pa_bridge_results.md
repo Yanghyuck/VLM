@@ -23,20 +23,32 @@
 
 ---
 
-## 결과 요약: 3/4 PASS
+## 결과 요약 (2회차, lifespan warm-up + timeout 240): **4/4 PASS** ⭐
 
-| 샘플 | carcass | http | 추론 시간 | 저장 | 비고 |
-|---|---|---|---|---|---|
-| `normal_case` | 3010 | 200 | **128.9s** | ✅ | 첫 호출 warm-up 영향 |
-| `backfat_error_case` | 3025 | timeout | 180.0s | ❌ | client timeout (서버 측 추론은 진행 중) |
-| `entry_error_case` | 3041 | 200 | 120.3s | ✅ | 등외 + 비정상 진입 |
-| `sample_3473` | 3473 | 200 | **26.0s** | ✅ | warmed-up 후 안정적 |
+| 샘플 | carcass | http | 추론 시간 | 저장 |
+|---|---|---|---|---|
+| `normal_case` | 3010 | 200 | **20.5s** | ✅ |
+| `backfat_error_case` | 3025 | 200 | **34.1s** | ✅ |
+| `entry_error_case` | 3041 | 200 | **25.5s** | ✅ |
+| `sample_3473` | 3473 | 200 | **22.0s** | ✅ |
 
-### 시간 패턴 분석
-- 1번째(3010) → 4번째(3473): **128.9s → 26.0s** (~5배 가속)
-- 첫 호출은 CUDA 커널 컴파일/캐싱으로 인한 warm-up 영향
-- 2번째(3025)는 등외+다중 error_code 로 가장 복잡한 추론 → client 180s timeout
-  - 운영 시 `config.api.inference_timeout_sec` 상향 또는 warm-up 후 운영 필요
+평균 25.5초/요청, 모든 호출 안정적.
+
+### 1회차 vs 2회차 (A1 warm-up + A2 timeout 240 효과)
+
+| 샘플 | 1회차 (cold) | 2회차 (warmed) | 가속 |
+|---|---|---|---|
+| normal_case (3010) | 128.9s | **20.5s** | 6.3× |
+| backfat_error_case (3025) | **180s timeout** | **34.1s** | timeout 해결 |
+| entry_error_case (3041) | 120.3s | **25.5s** | 4.7× |
+| sample_3473 | 26.0s | 22.0s | 안정 |
+
+### 적용된 변경
+
+- **`vlm/api/server.py` lifespan**: 모델 로드 후 dummy 추론 1회 (warm-up). startup 시간 56s
+  (모델 35s + warm-up 21s) 로 늘지만 사용자 첫 요청부터 안정적 추론 시간.
+- **`config.api.inference_timeout_sec`**: 180 → **240** (등외+다중 error_code 같은 복잡 입력 마진).
+- **`config.api.warmup_on_startup`** 토글 추가 (`true` 기본).
 
 ---
 
