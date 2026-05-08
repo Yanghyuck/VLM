@@ -90,6 +90,30 @@ class TestEnforceGrade:
         assert text == "최종 2 등급으로 판정"
         assert changed is False
 
+    def test_이의신청가능_패턴_교체(self):
+        # 스모크 회귀: 입력 등외, 응답에 "이의 신청 가능: 1+ 등급" 환각
+        text, changed = enforce_grade(
+            "등급 이의 신청 가능: 1+ 등급", "등외"
+        )
+        assert "1+ 등급" not in text
+        assert "이의 신청 가능: 등외 등급" in text
+        assert changed is True
+
+    def test_이의신청가능_콜론_변형_허용(self):
+        # 전각 콜론 / 공백 변형
+        text, changed = enforce_grade(
+            "이의 신청 가능 ： 2 등급", "등외"
+        )
+        assert "등외 등급" in text
+        assert changed is True
+
+    def test_이의신청가능_입력과_같으면_미변경(self):
+        text, changed = enforce_grade(
+            "이의 신청 가능: 1+ 등급", "1+"
+        )
+        assert text == "이의 신청 가능: 1+ 등급"
+        assert changed is False
+
 
 # ---------------------------------------------------------------------------
 # apply_postprocess — 통합

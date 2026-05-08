@@ -240,6 +240,9 @@ def generate_report(
             do_sample=False,
             temperature=None,
             top_p=None,
+            # greedy 디코딩이 검출 실패 케이스에서 가끔 같은 토큰 시퀀스를 반복하는
+            # 폭주 모드에 빠지는 사례 발견(스모크 backfat_error_case). 보수적인 1.05 로 차단.
+            repetition_penalty=1.05,
         )
 
     generated = output_ids[:, inputs["input_ids"].shape[1]:]

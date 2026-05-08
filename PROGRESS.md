@@ -389,7 +389,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 
 ## 테스트 현황
 
-**최종 결과: 79/79 통과** (2026-05-08 기준, 우선순위 2 학습 데이터 보강 + B2 cwd 회귀 가드 후)
+**최종 결과: 82/82 통과** (2026-05-09, A 보완 — repetition_penalty + A4 새 패턴 후)
 
 | 파일 | 테스트 수 | 대상 |
 |---|---|---|
@@ -401,7 +401,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 | `tests/test_logging.py` | 4 | JSON 구조적 로깅 |
 | `tests/test_env_override.py` | 7 | 환경변수 config override |
 | `tests/test_thema_pa_vlm_bridge.py` | 7 | thema_pa ↔ VLM 브릿지 + B2 cwd 회귀 (THEMA_PA_ROOT 미존재 시 skip) |
-| `tests/test_postprocess.py` | 18 | A3 조사 정규화 + A4 등급 정합성 + 통합 |
+| `tests/test_postprocess.py` | 21 | A3 조사 정규화 + A4 등급 정합성(이의신청 패턴 포함) + 통합 |
 | `tests/test_convert_dataset.py` | 16 | `_eul_ro` 종성 검사 + `_summary_response` 조사 회귀 가드 |
 
 **End-to-End 검증 스크립트**
@@ -658,12 +658,13 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] `generate_report(..., postprocess=True)` 인자 (기본 ON)
 - [x] **학습 데이터 근본 수정** — `convert_dataset.py:_eul_ro` 헬퍼로 조사 자동 처리, 성별 라벨 `암퇘지/수퇘지/거세` → `암컷/수컷/거세` 통일. `livestock_train.json` 재생성 시 어색 패턴 3,305건 → 0건.
 - [x] 단위 테스트 34건 추가 (test_postprocess 18 + test_convert_dataset 16). 전체 77/77 PASS.
-- [~] **재학습 진행 중** (2026-05-08 시작, ~5시간 예상)
-  - 출력 디렉터리: `vlm/train/output/qwen3vl-lora/` (이전 v2 어댑터는 `qwen3vl-lora-v2-prejosa/` 로 백업)
-  - 데이터: `livestock_train.json` 6,610 샘플 (held-out 50, 어색 조사 0건)
-  - YAML: `qwen3vl_lora_v2.yaml` (Vision Tower LoRA + AI 이미지, 3 epoch)
-  - 로그: `vlm/train/training_v2_corrected.log`
-  - 다음 세션 시작 시 학습 종료 확인 → v1 vs v2-corrected 벤치마크
+- [x] **재학습 완료 (v2-corrected)** — 2026-05-08 17:16 시작 → 22:35 종료, **5시간 2분** (예상치와 일치)
+  - 출력: `vlm/train/output/qwen3vl-lora/adapter_model.safetensors` (840 MB)
+  - 백업: 이전 어색 조사 학습본 → `vlm/train/output/qwen3vl-lora-v2-prejosa/`
+  - 메트릭: **train_loss 0.166** (v2-prejosa 0.187 대비 -11%), **eval_loss 0.079** (v2-prejosa 0.130 대비 **-42%** ⭐)
+  - 558/558 step (3.0 epoch), eval_loss < train_loss → 과적합 없음
+  - 학습 데이터 정제(어색 조사 3,305건 제거 + 성별 라벨 통일) 효과가 메트릭에 그대로 반영
+  - 다음 단계: v1 vs v2-corrected 벤치마크 (held-out 50건) → 응답 품질 정량 비교
 
 ### 우선순위 2 — 응답 품질 (재학습/후처리, 무거움)
 - [ ] **A3**: 한국어 조사 정규화 — "거세으로" → "거세로", "1+으로 처리" → "1+로 처리". 학습 데이터 패턴 문제라 다음 학습 사이클 또는 응답 후처리 필터.

@@ -25,6 +25,22 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
   - `test_save_vlm_response_absolute_path_unchanged` — 절대경로 명시 시 그대로 동작
 - 전체 79/79 PASS
 
+### Fixed — 추론 안정성 + A4 패턴 보강 (v2-corrected 스모크 회귀 대응)
+- `vlm/train/inference.py` — `generate(..., repetition_penalty=1.05)` 추가
+  - 회귀 사례: 검출 실패 입력에서 greedy 디코딩이 같은 토큰 시퀀스 반복 폭주 (71s, 무한반복, 이중 JSON)
+  - 효과: backfat_error 케이스 71.4s → 15.7s, 정상 JSON 으로 회귀 해소
+- `vlm/postprocess.py` — A4 등급 정합성 패턴 확장
+  - 추가: "이의 신청 가능: X 등급" / 전각 콜론 변형 허용
+  - 기존 비교 문맥 보존 정책 유지
+- `tests/test_postprocess.py` — A4 새 패턴 3 테스트 (전체 82/82 PASS)
+
+### Trained — v2-corrected LoRA 어댑터 (정제 데이터 재학습)
+- 데이터 정제 후 동일 YAML(`qwen3vl_lora_v2.yaml`)로 558 step / 3 epoch 재학습 (5h 2m)
+- **train_loss 0.187 → 0.166** (-11%), **eval_loss 0.130 → 0.079** (-42% ⭐)
+- 출력: `vlm/train/output/qwen3vl-lora/adapter_model.safetensors` (840 MB)
+- 이전 어색 조사 학습본은 `qwen3vl-lora-v2-prejosa/` 로 백업 보존
+- 차후 작업: v1 / v2-prejosa / v2-corrected 3-way 벤치마크 + 후처리 의존도 측정
+
 ### Changed — 학습 데이터 패턴 보강 (조사 + 성별 라벨)
 - **근본 원인 수정**: `livestock_train.json` 에 박혀 있던 `거세으로` 1,666건 + `암퇘지/수퇘지으로` 1,639건 (총 3,305건) 어색 패턴 제거
 - `vlm/train/convert_dataset.py`

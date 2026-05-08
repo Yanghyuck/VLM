@@ -49,9 +49,10 @@ def normalize_josa(text: str) -> tuple[str, bool]:
 
 
 # A4 — 등급 정합성
-# 명확한 단언 표현 두 가지만 교체:
+# 명확한 단언 표현만 교체:
 #   (1) "<X> 등급으로 판정" — '판정' 동사가 뒤따를 때
 #   (2) "최종 <X> 등급" — '최종' 이 앞에 올 때
+#   (3) "이의 신청 가능: <X> 등급" — 등급 안내성 단언
 # 비교 문맥 ("1+ 등급 도체 대비") 은 위 패턴에 안 걸려 보존됨.
 def _grade_pattern(expected: str) -> re.Pattern[str]:
     others = [g for g in VALID_GRADES if g != expected]
@@ -61,6 +62,7 @@ def _grade_pattern(expected: str) -> re.Pattern[str]:
     return re.compile(
         rf"(?P<g1>{alt})(?P<gap1>\s*등급)(?=\s*으로\s*판정)"
         rf"|최종(?P<sp>\s+)(?P<g2>{alt})(?P<gap2>\s*등급)"
+        rf"|(?P<lead>이의\s*신청\s*가능\s*[:：]\s*)(?P<g3>{alt})(?P<gap3>\s*등급)"
     )
 
 
@@ -74,7 +76,9 @@ def enforce_grade(text: str, expected_grade: str) -> tuple[str, bool]:
     def repl(m: re.Match[str]) -> str:
         if m.group("g1"):
             return f"{expected_grade}{m.group('gap1')}"
-        return f"최종{m.group('sp')}{expected_grade}{m.group('gap2')}"
+        if m.group("g2"):
+            return f"최종{m.group('sp')}{expected_grade}{m.group('gap2')}"
+        return f"{m.group('lead')}{expected_grade}{m.group('gap3')}"
 
     new_text, n = pat.subn(repl, text)
     return new_text, n > 0
