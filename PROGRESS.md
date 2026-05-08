@@ -281,12 +281,14 @@ save_vlm_response_json()
 storage/vlm_reports/{ymd}_{pigno}_vlm_report.json
 ```
 
-### thema_pa 측 추가 (별도 리포)
+### thema_pa 측 추가 (별도 리포 — `thema_pa_VLM`)
+
+운영 연동 대상은 thema_pa 원본 리포가 아닌 VLM 통합용 사본 `thema_pa_VLM` 입니다.
 
 | 위치 | 내용 |
 |---|---|
-| `thema_pa/config.json` | `vlm_api` 블록 (url / timeout_sec / api_key / output_dir) |
-| `thema_pa/comm/rest_api.py` | `SendVLMReport()`, `validate_vlm_response_json()`, `save_vlm_response_json()` |
+| `thema_pa_VLM/config.json` | `vlm_api` 블록 (url / timeout_sec / api_key / output_dir) |
+| `thema_pa_VLM/comm/rest_api.py` | `SendVLMReport()`, `validate_vlm_response_json()`, `save_vlm_response_json()` |
 
 ### VLM 측 변경 (본 리포)
 
@@ -298,7 +300,7 @@ storage/vlm_reports/{ymd}_{pigno}_vlm_report.json
 - `row_to_output()` 에서 `result_image_path` 자동 채움 (이전 `null`)
 
 #### `tests/test_thema_pa_vlm_bridge.py` — 통합 테스트 5건
-- `THEMA_PA_ROOT` 환경변수로 thema_pa 경로 주입, 미존재 시 자동 skip
+- `THEMA_PA_ROOT` 환경변수로 `thema_pa_VLM` 경로 주입 (기본값 `C:\Users\IPC\Desktop\git\thema_pa_VLM`), 미존재 시 자동 skip
 - `vlm_api` 설정 블록 존재 + 기댓값 일치 검증
 - 샘플 페이로드 POST 흐름 (`requests.post` 모킹)
 - 샘플 JSON 이 `ReportRequest` + `ThemaPAOutput` 양쪽 스키마 통과
@@ -614,8 +616,8 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] **CHANGELOG.md** — 버전별 변경 이력 + 결정 이력
 
 ### 5주차 — thema_pa 시스템 통합 ✅
-- [x] thema_pa `vlm_api` config 블록 (url / timeout / output_dir)
-- [x] thema_pa `RestAPI.SendVLMReport` 구현 (별도 리포)
+- [x] `thema_pa_VLM/config.json` 에 `vlm_api` 블록 (url / timeout / output_dir)
+- [x] `thema_pa_VLM/comm/rest_api.py` 의 `RestAPI.SendVLMReport` 구현
 - [x] thema_pa 응답 검증 + 저장 (`validate/save_vlm_response_json`)
 - [x] **VLM 측 이미지 경로 자동 매칭** (`scripts/export_from_db.py` AI/ORI 패턴)
 - [x] **VLM 측 통합 테스트 5건** (`tests/test_thema_pa_vlm_bridge.py`)

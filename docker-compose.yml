@@ -29,7 +29,7 @@ services:
       # HuggingFace 캐시 (재다운로드 방지)
       - ~/.cache/huggingface:/root/.cache/huggingface
       # 도체 이미지 (운영 환경)
-      - C:/Users/IPC/Desktop/git/thema_pa/images:/data/images:ro
+      - C:/Users/IPC/Desktop/git/thema_pa_VLM/images:/data/images:ro
     deploy:
       resources:
         reservations:
@@ -52,7 +52,7 @@ services:
       - ./config.json:/app/config.json:ro
       - ./vlm/train/output:/app/vlm/train/output:ro
       - ~/.cache/huggingface:/root/.cache/huggingface
-      - C:/Users/IPC/Desktop/git/thema_pa/images:/data/images:ro
+      - C:/Users/IPC/Desktop/git/thema_pa_VLM/images:/data/images:ro
     deploy:
       resources:
         reservations:

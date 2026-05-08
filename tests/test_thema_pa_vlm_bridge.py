@@ -11,7 +11,7 @@ from vlm.api.schemas import ReportRequest
 from vlm.schema.thema_pa_output import ThemaPAOutput
 
 
-DEFAULT_THEMA_PA_ROOT = Path(r"C:\Users\IPC\Desktop\git\thema_pa")
+DEFAULT_THEMA_PA_ROOT = Path(r"C:\Users\IPC\Desktop\git\thema_pa_VLM")
 SAMPLE_PATH = Path(__file__).resolve().parent.parent / "vlm" / "schema" / "samples" / "sample_3473.json"
 
 

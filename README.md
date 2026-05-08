@@ -147,16 +147,17 @@ thema_pa MySQL DB + 도체 이미지
 
 ### thema_pa ↔ VLM 운영 연동 (5주차)
 
-YOLO 도체 분석이 끝나면 thema_pa 가 VLM API 를 직접 호출해 한국어 리포트를 받아 저장합니다.
+YOLO 도체 분석이 끝나면 `thema_pa_VLM` (운영 통합용 사본 리포) 이 VLM API 를 직접 호출해
+한국어 리포트를 받아 저장합니다.
 
 ```
-thema_pa (YOLOv11)
+thema_pa_VLM (YOLOv11)
     │  POST /v1/report
     ▼
 VLM FastAPI ─► Qwen3-VL LoRA ─► JSON 응답
     │
     ▼
-thema_pa: validate_vlm_response_json → save_vlm_response_json
+thema_pa_VLM: validate_vlm_response_json → save_vlm_response_json
     │
     ▼
 storage/vlm_reports/{ymd}_{pigno}_vlm_report.json
@@ -164,7 +165,8 @@ storage/vlm_reports/{ymd}_{pigno}_vlm_report.json
 
 VLM 측 변경: `scripts/export_from_db.py` 가 도체번호로 AI/ORI 이미지를 자동 매칭하여
 `result_image_path` 를 채워줍니다(이전 `null`). 통합 동작은
-`tests/test_thema_pa_vlm_bridge.py` 5건이 검증합니다 (`THEMA_PA_ROOT` 환경변수로 thema_pa 리포 경로 주입, 미존재 시 자동 skip).
+`tests/test_thema_pa_vlm_bridge.py` 5건이 검증합니다 (`THEMA_PA_ROOT` 환경변수로
+`thema_pa_VLM` 리포 경로 주입, 미존재 시 자동 skip).
 
 ---
 
