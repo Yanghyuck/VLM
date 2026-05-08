@@ -1,6 +1,6 @@
 {
   "carcass_no": 3041,
-  "slaughter_ymd": "20260423",
+  "slaughter_ymd": "20260422",
   "backfat_average": 9.0,
   "multifidus_thk": 0.0,
   "body_length": 0.0,
@@ -20,5 +20,5 @@
     "has_large_slope": false,
     "threshold": 0.28
   },
-  "result_image_path": "D:/Image/20260423/AIS/jpg/20260423_PA_001_0041_1_7_ai.jpg"
+  "result_image_path": "C:/Users/IPC/Desktop/git/thema_pa_VLM/images/AI/0716_ai_20260422170811_3041_3043_SP_CAM7.jpg"
 }

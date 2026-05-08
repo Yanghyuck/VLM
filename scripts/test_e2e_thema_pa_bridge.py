@@ -26,6 +26,7 @@
 #   python scripts/test_e2e_thema_pa_bridge.py
 # =============================================================================
 
+import contextlib
 import importlib
 import json
 import os
@@ -34,6 +35,17 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+
+@contextlib.contextmanager
+def chdir(path: Path):
+    """thema_pa_VLM 운영 cwd 를 모방 — save_vlm_response_json 의 ./storage/... 상대경로가 정확히 thema_pa_VLM 하위에 저장되도록."""
+    saved = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(saved)
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -147,7 +159,8 @@ def main() -> int:
             out_path.unlink()
 
         t0 = time.time()
-        response = rest_api.SendVLMReport(payload)
+        with chdir(root):
+            response = rest_api.SendVLMReport(payload)
         dt = time.time() - t0
 
         ok = response is not None and response.status_code == 200
