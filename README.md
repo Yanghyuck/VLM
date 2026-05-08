@@ -9,7 +9,7 @@
 [![Transformers](https://img.shields.io/badge/Transformers-4.55+-ffb71b.svg)](https://huggingface.co/docs/transformers)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.33+-ff4b4b.svg)](https://streamlit.io/)
-[![Tests](https://img.shields.io/badge/tests-38%20passed-success.svg)](#테스트)
+[![Tests](https://img.shields.io/badge/tests-43%20passed-success.svg)](#테스트)
 
 ---
 
@@ -43,7 +43,7 @@
 >   - v1: 텍스트만 학습 (베이스라인)
 >   - v2: Vision Tower + AI 분석 이미지까지 학습 (메인)
 > **결과**: held-out 50건 정량 평가에서 **ROUGE-L +26%, BERTScore +14%, 100% sample-wise 우월**
-> **엔지니어링**: FastAPI (auth + rate limit + JSON 로깅), Docker (GPU), GitHub Actions CI, **38 단위 테스트** 전 통과
+> **엔지니어링**: FastAPI (auth + rate limit + JSON 로깅), Docker (GPU), GitHub Actions CI, **43 단위 테스트** 전 통과 (thema_pa 통합 포함)
 
 | 영역 | 산출물 |
 |---|---|
@@ -92,7 +92,7 @@ pip install -r requirements.txt
 cp config.example.json config.json   # → DB 비밀번호, 경로 수정
 
 # 2. 테스트
-pytest tests/                        # ✅ 23 passed
+pytest tests/                        # ✅ 43 passed
 
 # 3. 실행 (학습 완료 후)
 streamlit run vlm/demo/app.py        # 데모 UI        : http://localhost:8501
@@ -145,6 +145,27 @@ thema_pa MySQL DB + 도체 이미지
 
 상세 구조는 [ARCHITECTURE.md](./ARCHITECTURE.md) 를 참고하세요.
 
+### thema_pa ↔ VLM 운영 연동 (5주차)
+
+YOLO 도체 분석이 끝나면 thema_pa 가 VLM API 를 직접 호출해 한국어 리포트를 받아 저장합니다.
+
+```
+thema_pa (YOLOv11)
+    │  POST /v1/report
+    ▼
+VLM FastAPI ─► Qwen3-VL LoRA ─► JSON 응답
+    │
+    ▼
+thema_pa: validate_vlm_response_json → save_vlm_response_json
+    │
+    ▼
+storage/vlm_reports/{ymd}_{pigno}_vlm_report.json
+```
+
+VLM 측 변경: `scripts/export_from_db.py` 가 도체번호로 AI/ORI 이미지를 자동 매칭하여
+`result_image_path` 를 채워줍니다(이전 `null`). 통합 동작은
+`tests/test_thema_pa_vlm_bridge.py` 5건이 검증합니다 (`THEMA_PA_ROOT` 환경변수로 thema_pa 리포 경로 주입, 미존재 시 자동 skip).
+
 ---
 
 ## 📦 기술 스택
@@ -184,10 +205,13 @@ VLM/
 │
 ├── scripts/
 │   ├── build_dataset.py       # DB + 이미지 → JSONL
-│   ├── export_from_db.py      # DB → 샘플 JSON
+│   ├── export_from_db.py      # DB → 샘플 JSON (이미지 경로 자동 매칭)
 │   ├── test_inference.py      # 학습된 LoRA 추론 검증
 │   ├── test_demo_pipeline.py  # Streamlit 데모 파이프라인 검증
 │   └── test_api.py            # FastAPI 엔드포인트 검증
+│
+├── storage/
+│   └── vlm_reports/           # thema_pa → VLM 호출 결과 (gitignore)
 │
 ├── vlm/
 │   ├── config.py              # config.json 로더
@@ -217,7 +241,7 @@ VLM/
 │
 ├── docs/figures/              # 7장 시각화 (등급 분포, 측정값 등)
 │
-└── tests/                     # 31 테스트 (스키마/API/config/JSON/auth/로깅)
+└── tests/                     # 43 테스트 (스키마/API/config/JSON/auth/로깅/env/thema_pa 통합)
 ```
 
 ---
@@ -258,7 +282,7 @@ python vlm/api/server.py
 
 ## 🧪 테스트
 
-**단위 테스트: 38/38 통과** (2026-04-28 기준)
+**단위 테스트: 43/43 통과** (2026-05-08 기준)
 
 | 파일 | 대상 | 테스트 수 |
 |---|---|---|
@@ -269,6 +293,7 @@ python vlm/api/server.py
 | `tests/test_auth.py` | X-API-Key 인증 | 4 |
 | `tests/test_logging.py` | JSON 구조적 로깅 | 4 |
 | `tests/test_env_override.py` | 환경변수 config override | 7 |
+| `tests/test_thema_pa_vlm_bridge.py` | thema_pa ↔ VLM 브릿지 통합 | 5 |
 
 ```bash
 pytest tests/                # 기본 실행 (integration 제외)
@@ -341,6 +366,7 @@ Swagger UI: http://localhost:8000/docs
 | 3주차 | Streamlit 데모 + FastAPI + 중앙 설정 + 추론 검증 | ✅ 완료 |
 | 3.5주차 | **v2 재학습** (Vision LoRA + AI 이미지, eval_loss=0.080) | ✅ 완료 |
 | 4주차 | **3-way 벤치마크** Base/v1/v2 + 결과 분석 | ✅ 완료 |
+| 5주차 | **thema_pa ↔ VLM 브릿지 통합** (이미지 자동 매칭 + 통합 테스트) | ✅ 완료 |
 
 상세 진행 이력은 [PROGRESS.md](./PROGRESS.md) 를 참고하세요.
 

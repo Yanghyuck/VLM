@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-04-28 (v1.0.0 릴리스, main 동기화 완료)
+**최종 업데이트**: 2026-05-08 (thema_pa ↔ VLM 브릿지 통합)
 **현재 브랜치**: `main` (default), `local-vlm-train` (개발)
 **리포지토리**: https://github.com/Yanghyuck/VLM
 **릴리스**: [`v1.0.0`](https://github.com/Yanghyuck/VLM/releases/tag/v1.0.0)
@@ -64,6 +64,7 @@ thema_pa MySQL DB ──► scripts/build_dataset.py ──► vlm/data/dataset.
 | 4주차 | 3-way 벤치마크 (Base / v1 / v2) + 결과 분석 | ✅ 완료 | 2026-04-27 |
 | Plan C | 양자화 + 환경변수 override + CHANGELOG + main 머지 | ✅ 완료 | 2026-04-28 |
 | **v1.0.0** | **`main` 동기화 + `v1.0.0` 태그 푸시** | ✅ 완료 | 2026-04-28 |
+| 5주차 | **thema_pa ↔ VLM 브릿지 통합** (이미지 자동 매칭 + 통합 테스트) | ✅ 완료 | 2026-05-08 |
 
 ---
 
@@ -248,6 +249,78 @@ GPTQ/AWQ 는 Linux+Py3.11 환경에서 재평가 필요.
 
 ---
 
+## 5주차 — thema_pa 시스템 통합 ✅
+
+**완료**: 2026-05-08
+**커밋**: `93a2981`, `429e60b`
+
+YOLO 도체 분석 시스템(`thema_pa`)이 측정 결과를 VLM API로 직접 호출해
+한국어 판정 리포트를 받아 저장하는 운영 흐름을 구축.
+
+### 호출 흐름
+
+```
+thema_pa (YOLOv11)
+    │
+    │  ① 도체 분석 완료 → JSON 페이로드 생성
+    ▼
+RestAPI.SendVLMReport(payload)
+    │
+    │  ② POST http://127.0.0.1:8000/v1/report
+    ▼
+VLM FastAPI (Qwen3-VL LoRA)
+    │
+    │  ③ 한국어 리포트 (summary / grade_reason / warnings / recommendation)
+    ▼
+validate_vlm_response_json()  ← 필수 4필드 검증
+    │
+    ▼
+save_vlm_response_json()
+    │
+    ▼
+storage/vlm_reports/{ymd}_{pigno}_vlm_report.json
+```
+
+### thema_pa 측 추가 (별도 리포)
+
+| 위치 | 내용 |
+|---|---|
+| `thema_pa/config.json` | `vlm_api` 블록 (url / timeout_sec / api_key / output_dir) |
+| `thema_pa/comm/rest_api.py` | `SendVLMReport()`, `validate_vlm_response_json()`, `save_vlm_response_json()` |
+
+### VLM 측 변경 (본 리포)
+
+#### `scripts/export_from_db.py` — 이미지 경로 자동 매칭
+- AI 이미지: `0716_ai_{ymd}_{pigno}_{pigno+offset}_SP_CAM7.jpg`
+- ORI 이미지: `0716_ori_{ymd}_{pigno}_SP_CAM7.jpg`
+- `CFG.paths.image_dir` 의 'AI' 포함 여부로 패턴 자동 선택
+- `scan_images()` 가 이미지 디렉터리를 스캔해 `pigno → 절대경로` 맵 생성
+- `row_to_output()` 에서 `result_image_path` 자동 채움 (이전 `null`)
+
+#### `tests/test_thema_pa_vlm_bridge.py` — 통합 테스트 5건
+- `THEMA_PA_ROOT` 환경변수로 thema_pa 경로 주입, 미존재 시 자동 skip
+- `vlm_api` 설정 블록 존재 + 기댓값 일치 검증
+- 샘플 페이로드 POST 흐름 (`requests.post` 모킹)
+- 샘플 JSON 이 `ReportRequest` + `ThemaPAOutput` 양쪽 스키마 통과
+- 응답 검증 + `storage/vlm_reports/` 파일 저장 동작
+- 필수 필드 누락 시 `ValueError("missing fields")` 발생
+
+#### `storage/vlm_reports/` 디렉터리
+- 운영 시 thema_pa → VLM 호출 결과를 누적 저장
+- `*.json` 은 `.gitignore` 처리 (운영 산출물), `.gitkeep` 만 추적
+
+### 검증 결과
+
+```
+tests/test_thema_pa_vlm_bridge.py    ✅ 5/5 PASSED (0.72s)
+```
+
+샘플 응답 (`storage/vlm_reports/20260422_3473_vlm_report.json`):
+- 요청: 도체번호 3473, 등급 1+, 등지방 20mm, 자동 매칭된 AI 이미지 경로
+- 응답: `summary`, `grade_reason`, `warnings`, `recommendation`, `model_used="lora (25.57s)"`
+
+---
+
 ## 보안 조치
 
 ### git 히스토리 비밀번호 제거 ✅
@@ -291,7 +364,7 @@ GPTQ/AWQ 는 Linux+Py3.11 환경에서 재평가 필요.
 
 ## 테스트 현황
 
-**최종 결과: 38/38 통과** (2026-04-28 기준)
+**최종 결과: 43/43 통과** (2026-05-08 기준)
 
 | 파일 | 테스트 수 | 대상 |
 |---|---|---|
@@ -302,6 +375,7 @@ GPTQ/AWQ 는 Linux+Py3.11 환경에서 재평가 필요.
 | `tests/test_auth.py` | 4 | X-API-Key 인증 (asyncio) |
 | `tests/test_logging.py` | 4 | JSON 구조적 로깅 |
 | `tests/test_env_override.py` | 7 | 환경변수 config override |
+| `tests/test_thema_pa_vlm_bridge.py` | 5 | thema_pa ↔ VLM 브릿지 (THEMA_PA_ROOT 미존재 시 skip) |
 
 **End-to-End 검증 스크립트**
 
@@ -339,10 +413,13 @@ VLM/
 │
 ├── scripts/
 │   ├── build_dataset.py              ← DB + AI 이미지 → JSONL
-│   ├── export_from_db.py             ← DB → 샘플 JSON
+│   ├── export_from_db.py             ← DB → 샘플 JSON (이미지 경로 자동 매칭)
 │   ├── test_inference.py             ← 학습된 LoRA 추론 검증
 │   ├── test_demo_pipeline.py         ← Streamlit 데모 파이프라인 검증
 │   └── test_api.py                   ← FastAPI 엔드포인트 검증
+│
+├── storage/
+│   └── vlm_reports/                  ← thema_pa → VLM 호출 결과 (gitignore, .gitkeep만 추적)
 │
 ├── vlm/
 │   ├── config.py                     ← config.json 로더
@@ -392,13 +469,15 @@ VLM/
 │
 ├── docs/figures/                     ← 7장 시각화 .png
 │
-└── tests/                            ← 31 테스트 (6개 파일)
+└── tests/                            ← 43 테스트 (8개 파일)
     ├── test_schema.py                # ThemaPAOutput (5)
     ├── test_api_schemas.py           # Request/Response (7)
     ├── test_config.py                # config 로더 (3)
     ├── test_json_extraction.py       # JSON 파서 (8)
     ├── test_auth.py                  # X-API-Key (4, asyncio)
-    └── test_logging.py               # JSON 로깅 (4)
+    ├── test_logging.py               # JSON 로깅 (4)
+    ├── test_env_override.py          # 환경변수 override (7)
+    └── test_thema_pa_vlm_bridge.py   # thema_pa 통합 (5, THEMA_PA_ROOT 의존)
 ```
 
 ---
@@ -533,3 +612,11 @@ curl -X POST http://localhost:8000/v1/report \
 - [ ] HTTPS 리버스 프록시 (사용자 환경 의존)
 - [ ] Sentry/PagerDuty 알림 (선택)
 - [x] **CHANGELOG.md** — 버전별 변경 이력 + 결정 이력
+
+### 5주차 — thema_pa 시스템 통합 ✅
+- [x] thema_pa `vlm_api` config 블록 (url / timeout / output_dir)
+- [x] thema_pa `RestAPI.SendVLMReport` 구현 (별도 리포)
+- [x] thema_pa 응답 검증 + 저장 (`validate/save_vlm_response_json`)
+- [x] **VLM 측 이미지 경로 자동 매칭** (`scripts/export_from_db.py` AI/ORI 패턴)
+- [x] **VLM 측 통합 테스트 5건** (`tests/test_thema_pa_vlm_bridge.py`)
+- [x] `storage/vlm_reports/` 디렉터리 + .gitignore 정비
