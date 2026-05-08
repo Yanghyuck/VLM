@@ -34,6 +34,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 
 import mysql.connector
@@ -43,6 +44,13 @@ sys.path.insert(0, ROOT)
 from vlm.config import CFG
 
 OUTPUT_DIR = os.path.join(ROOT, CFG.paths.samples_dir)
+IMAGE_DIR = CFG.paths.image_dir
+
+# AI 이미지: 0716_ai_{datetime}_{pigno}_{pigno+offset}_SP_CAM7.jpg
+# ORI 이미지: 0716_ori_{datetime}_{pigno}_SP_CAM7.jpg
+FILENAME_RE_AI = re.compile(r"^.+_ai_\d+_(\d+)_\d+_.+\.jpg$", re.IGNORECASE)
+FILENAME_RE_ORI = re.compile(r"^.+_ori_\d+_(\d+)_.+\.jpg$", re.IGNORECASE)
+FILENAME_RE = FILENAME_RE_AI if "AI" in IMAGE_DIR.upper() else FILENAME_RE_ORI
 
 
 def get_connection():
@@ -79,7 +87,21 @@ def fetch_act(cur, pigno=None, limit=10):
     return cur.fetchall()
 
 
-def row_to_output(row: dict) -> dict:
+def scan_images() -> dict[str, str]:
+    result = {}
+    if not os.path.isdir(IMAGE_DIR):
+        return result
+
+    for fname in os.listdir(IMAGE_DIR):
+        m = FILENAME_RE.match(fname)
+        if not m:
+            continue
+        pigno = m.group(1).lstrip("0") or "0"
+        result[pigno] = os.path.join(IMAGE_DIR, fname)
+    return result
+
+
+def row_to_output(row: dict, image_path: str | None) -> dict:
     return {
         "carcass_no":      int(row["pigno_cnt"]),
         "slaughter_ymd":   str(row["ymd"]),
@@ -99,7 +121,7 @@ def row_to_output(row: dict) -> dict:
             "AI_Outline_error":    0,
         },
         "backbone_slope": {"has_large_slope": False, "threshold": None},
-        "result_image_path": None,
+        "result_image_path": image_path,
     }
 
 
@@ -113,12 +135,14 @@ def export_one(pigno: int):
         print(f"pigno_cnt={pigno} 데이터 없음")
         return
 
-    output = row_to_output(rows[0])
+    image_map = scan_images()
+    output = row_to_output(rows[0], image_map.get(str(pigno)))
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     path = os.path.join(OUTPUT_DIR, f"sample_{pigno}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
-    print(f"저장: {path}  (등급={output['grade']}, 등지방={output['backfat_average']}mm)")
+    img_status = "있음" if output["result_image_path"] else "없음"
+    print(f"저장: {path}  (등급={output['grade']}, 등지방={output['backfat_average']}mm, 이미지={img_status})")
 
 
 def export_all(limit: int):
@@ -127,13 +151,15 @@ def export_all(limit: int):
     rows = fetch_act(cur, limit=limit)
     conn.close()
 
+    image_map = scan_images()
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     for row in rows:
-        output = row_to_output(row)
+        output = row_to_output(row, image_map.get(str(row["pigno_cnt"])))
         path = os.path.join(OUTPUT_DIR, f"sample_{row['pigno_cnt']}.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
-        print(f"저장: {path}  (등급={output['grade']}, 등지방={output['backfat_average']}mm)")
+        img_status = "있음" if output["result_image_path"] else "없음"
+        print(f"저장: {path}  (등급={output['grade']}, 등지방={output['backfat_average']}mm, 이미지={img_status})")
 
 
 def list_recent(limit: int = 10):
