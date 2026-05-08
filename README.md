@@ -2,7 +2,7 @@
 
 > **thema_pa** (YOLOv11 돼지 도체 AI) 위에 **Qwen3-VL-8B LoRA 파인튜닝** 모델을 한국어 판정 레이어로 추가하는 3종 포트폴리오
 
-[![Release](https://img.shields.io/badge/release-v1.0.0-blueviolet.svg)](https://github.com/Yanghyuck/VLM/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/badge/release-v1.1.0-blueviolet.svg)](https://github.com/Yanghyuck/VLM/releases/tag/v1.1.0)
 [![CI](https://github.com/Yanghyuck/VLM/actions/workflows/ci.yml/badge.svg)](https://github.com/Yanghyuck/VLM/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.7-ee4c2c.svg)](https://pytorch.org/)

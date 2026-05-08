@@ -1,9 +1,9 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-05-08 (5주차 thema_pa_VLM 통합 + lifespan warm-up + E2E 4/4)
-**현재 브랜치**: `main` (default), `local-vlm-train` (개발)
+**최종 업데이트**: 2026-05-08 (v1.1.0 태그 + 푸시 완료)
+**현재 브랜치**: `main` (default), `local-vlm-train` (개발 — 모든 신규 커밋·푸시 대상)
 **리포지토리**: https://github.com/Yanghyuck/VLM
-**릴리스**: [`v1.0.0`](https://github.com/Yanghyuck/VLM/releases/tag/v1.0.0)
+**릴리스**: [`v1.1.0`](https://github.com/Yanghyuck/VLM/tree/v1.1.0) (태그만, GitHub Release 페이지는 보류)
 
 ---
 
@@ -640,14 +640,15 @@ curl -X POST http://localhost:8000/v1/report \
 - [ ] Sentry/PagerDuty 알림 (선택)
 - [x] **CHANGELOG.md** — 버전별 변경 이력 + 결정 이력
 
-## 다음 세션 시작점 (2026-05-08 기준)
+## 다음 세션 시작점 (2026-05-08 기준, v1.1.0 이후)
 
-작업 트리 clean. 7 커밋 미푸시 (origin/main 미반영). 다음 세션 진입 시 이 섹션부터 확인.
+작업 트리 clean. `local-vlm-train` 푸시 완료(`a599c1c`). `v1.1.0` 태그 푸시 완료. 다음 세션 진입 시 이 섹션부터 확인.
 
-### 우선순위 1 — 5주차 마무리 (가벼움)
-- [ ] **C1**: `CHANGELOG.md` `[Unreleased]` 아래에 5주차 + E2E + warm-up 항목 추가
-- [ ] **D1**: `git push origin main` (현재 7 커밋 미푸시: `e6e6111`, `b81717d`, `02d5680`, `a63a4a1`, `92ddb6e`, `429e60b`, `93a2981`)
-- [ ] **D2**: `v1.1.0` 태그 + GitHub Release 노트 (5주차 통합 + warm-up + numpy 핀)
+### 우선순위 1 — 5주차 마무리 ✅ (이번 세션 완료)
+- [x] **C1**: `CHANGELOG.md` `[v1.1.0]` 섹션 추가 (5주차 + E2E + warm-up + numpy 핀)
+- [x] **D1**: `git push origin local-vlm-train` (메모리 규칙: main 직접 푸시 금지)
+- [x] **D2-tag**: `v1.1.0` 태그 생성 + 푸시 완료
+- [ ] **D2-release**: GitHub Release 페이지 — 보류 (gh CLI 미설치, 필요 시 웹 UI 또는 winget 설치 후 진행)
 
 ### 우선순위 2 — 응답 품질 (재학습/후처리, 무거움)
 - [ ] **A3**: 한국어 조사 정규화 — "거세으로" → "거세로", "1+으로 처리" → "1+로 처리". 학습 데이터 패턴 문제라 다음 학습 사이클 또는 응답 후처리 필터.
