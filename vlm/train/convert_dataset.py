@@ -73,7 +73,23 @@ _raw_grade = _raw_config()["grade"]
 GRADE_BACKFAT = {k: tuple(v) for k, v in _raw_grade["backfat_range"].items()}
 GRADE_WEIGHT  = {k: tuple(v) for k, v in _raw_grade["weight_range"].items()}
 
-GENDER_MAP = {1: "암퇘지", 2: "수퇘지", 3: "거세"}
+GENDER_MAP = {1: "암컷", 2: "수컷", 3: "거세"}
+
+
+def _eul_ro(word: str) -> str:
+    """단어 끝 글자의 종성 유무에 따라 '으로'/'로' 선택.
+
+    받침 있음 → '으로', 받침 없음 → '로'.
+    한글 음절 외(숫자/영문)에는 보수적으로 '으로' 반환 (학습 데이터에서
+    이런 케이스는 등장하지 않으나 안전 경로 유지).
+    """
+    if not word:
+        return "으로"
+    last = word[-1]
+    if "가" <= last <= "힣":
+        # (음절 코드 - 'ㅏ' 시작) % 28 == 0 이면 종성 없음
+        return "로" if (ord(last) - 0xAC00) % 28 == 0 else "으로"
+    return "으로"
 
 ERROR_LABEL = {
     "pig_RightEntry":      ("비정상 진입",       "도체가 라인에 바르게 진입하지 않아 전체 측정값 신뢰도가 저하됩니다."),
@@ -92,7 +108,7 @@ def _summary_response(meta: dict) -> str:
 
     errors = [label for key, (label, _) in ERROR_LABEL.items() if ec.get(key, 0) == 1]
 
-    s1 = (f"도체번호 {meta['carcass_no']}은(는) {gender}으로 "
+    s1 = (f"도체번호 {meta['carcass_no']}은(는) {gender}{_eul_ro(gender)} "
           f"{meta['slaughter_ymd'][:4]}년 {meta['slaughter_ymd'][4:6]}월 {meta['slaughter_ymd'][6:]}일 도축되었습니다.")
     s2 = (f"등지방 두께 {meta['backfat_average']}mm, 뭇갈래근 두께 {meta['multifidus_thk']}mm, "
           f"도체중 {meta['body_weight']}kg으로 측정되었습니다.")

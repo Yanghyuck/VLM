@@ -179,7 +179,7 @@ with col_right:
         rows = [
             ("도체번호", meta.get("carcass_no", "")),
             ("도축일", meta.get("slaughter_ymd", "")),
-            ("성별", {1: "암퇘지", 2: "수퇘지", 3: "거세"}.get(meta.get("gender"), "?")),
+            ("성별", {1: "암컷", 2: "수컷", 3: "거세"}.get(meta.get("gender"), "?")),
             ("도체중", f"{meta.get('body_weight', 0)} kg"),
             ("등지방 두께", f"{meta.get('backfat_average', 0)} mm"),
             ("뭇갈래근 두께", f"{meta.get('multifidus_thk', 0)} mm"),

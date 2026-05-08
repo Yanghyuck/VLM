@@ -39,12 +39,12 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class Gender(IntEnum):
-    SOW = 1       # 암퇘지
-    BOAR = 2      # 수퇘지
+    SOW = 1       # 암컷
+    BOAR = 2      # 수컷
     BARROW = 3    # 거세
 
     def label(self) -> str:
-        return {1: "암퇘지", 2: "수퇘지", 3: "거세"}[self.value]
+        return {1: "암컷", 2: "수컷", 3: "거세"}[self.value]
 
 
 class Grade(str):

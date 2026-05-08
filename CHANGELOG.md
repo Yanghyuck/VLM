@@ -15,6 +15,17 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 - `vlm/train/inference.py` — `generate_report(..., postprocess=True)` 인자 추가 (기본 ON, 벤치마크용 OFF 가능)
 - `tests/test_postprocess.py` — 단위 테스트 18건 (정상 텍스트 미변경 + 비교 문맥 보존 회귀 포함)
 
+### Changed — 학습 데이터 패턴 보강 (조사 + 성별 라벨)
+- **근본 원인 수정**: `livestock_train.json` 에 박혀 있던 `거세으로` 1,666건 + `암퇘지/수퇘지으로` 1,639건 (총 3,305건) 어색 패턴 제거
+- `vlm/train/convert_dataset.py`
+  - `_eul_ro(word)` 헬퍼 추가 — 종성 유무 검사로 `으로`/`로` 정확 선택 (한글 음절 코드 기반)
+  - `_summary_response` 가 `{gender}{_eul_ro(gender)}` 사용 — 성별 라벨에 맞는 조사 자동 선택
+  - `GENDER_MAP`: 성별 라벨을 **암퇘지/수퇘지/거세** → **암컷/수컷/거세** 로 통일
+- `vlm/schema/thema_pa_output.py` — `Gender.label()` 동일 변경 (입력 JSON 의 gender 정수는 그대로, 표시 텍스트만 변경)
+- `vlm/demo/app.py`, `notebooks/dataset_analysis.py` — 라벨 매핑 동기화
+- 재생성 결과: 어색한 패턴 0건, 정상 패턴(`거세로`/`암컷으로`/`수컷으로`) 3,305건
+- `tests/test_convert_dataset.py` — 16 단위 테스트 (조사 회귀 가드 포함). 전체 77/77 PASS.
+
 ### 향후 계획
 - 한국어 조사 정규화 — 후처리 외 학습 데이터 패턴 보강 (다음 학습 사이클)
 - 등급 정합성 — 학습 강화로 후처리 의존도 감소

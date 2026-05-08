@@ -389,7 +389,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 
 ## 테스트 현황
 
-**최종 결과: 61/61 통과** (2026-05-08 기준, 우선순위 2 후처리 적용 후)
+**최종 결과: 77/77 통과** (2026-05-08 기준, 우선순위 2 학습 데이터 보강 후)
 
 | 파일 | 테스트 수 | 대상 |
 |---|---|---|
@@ -402,6 +402,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 | `tests/test_env_override.py` | 7 | 환경변수 config override |
 | `tests/test_thema_pa_vlm_bridge.py` | 5 | thema_pa ↔ VLM 브릿지 (THEMA_PA_ROOT 미존재 시 skip) |
 | `tests/test_postprocess.py` | 18 | A3 조사 정규화 + A4 등급 정합성 + 통합 |
+| `tests/test_convert_dataset.py` | 16 | `_eul_ro` 종성 검사 + `_summary_response` 조사 회귀 가드 |
 
 **End-to-End 검증 스크립트**
 
@@ -651,12 +652,13 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] **D2-tag**: `v1.1.0` 태그 생성 + 푸시 완료
 - [ ] **D2-release**: GitHub Release 페이지 — 보류 (gh CLI 미설치, 필요 시 웹 UI 또는 winget 설치 후 진행)
 
-### 우선순위 2 — 응답 품질 후처리 ✅ (이번 세션 완료, 후처리 한정)
-- [x] **A3**: 한국어 조사 정규화 — `vlm/postprocess.py` (`거세으로→거세로`, `1+으로→1+로`, `등외으로→등외로`, `2으로→2로`)
-- [x] **A4**: 등급 정합성 — 입력 `grade` 와 다른 등급 단언("최종 2 등급", "X 등급으로 판정")을 입력 grade 로 강제 교체. 비교 문맥은 보존.
-- [x] `tests/test_postprocess.py` — 18 단위 테스트 (정상 텍스트 미변경 + 비교 문맥 보존 회귀 포함). 전체 61/61 PASS.
-- [x] `generate_report(..., postprocess=True)` 인자 추가 (기본 ON)
-- [ ] 학습 사이클을 통한 근본 해결 — 다음 학습 시 데이터 패턴 보강으로 후처리 의존도 축소
+### 우선순위 2 — 응답 품질 ✅ (이번 세션 완료, 학습 대기)
+- [x] **A3 후처리**: `vlm/postprocess.py` (`거세으로→거세로`, `1+으로→1+로`, `등외으로→등외로`, `2으로→2로`)
+- [x] **A4 후처리**: 등급 정합성 — 입력 `grade` 와 다른 등급 단언만 강제 교체. 비교 문맥 보존.
+- [x] `generate_report(..., postprocess=True)` 인자 (기본 ON)
+- [x] **학습 데이터 근본 수정** — `convert_dataset.py:_eul_ro` 헬퍼로 조사 자동 처리, 성별 라벨 `암퇘지/수퇘지/거세` → `암컷/수컷/거세` 통일. `livestock_train.json` 재생성 시 어색 패턴 3,305건 → 0건.
+- [x] 단위 테스트 34건 추가 (test_postprocess 18 + test_convert_dataset 16). 전체 77/77 PASS.
+- [ ] **재학습 시작 (사용자 승인 대기)** — `qwen3vl_lora_v2.yaml` 로 재실행 (~5시간). 재학습 후 v1 vs v2-corrected 벤치마크 권장.
 
 ### 우선순위 2 — 응답 품질 (재학습/후처리, 무거움)
 - [ ] **A3**: 한국어 조사 정규화 — "거세으로" → "거세로", "1+으로 처리" → "1+로 처리". 학습 데이터 패턴 문제라 다음 학습 사이클 또는 응답 후처리 필터.

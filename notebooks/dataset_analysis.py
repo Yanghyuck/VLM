@@ -54,7 +54,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 GRADE_ORDER = ["1+", "1", "2", "등외"]
 GRADE_COLOR = {"1+": "#2ecc71", "1": "#3498db", "2": "#f39c12", "등외": "#e74c3c"}
-GENDER_LABEL = {1: "암퇘지", 2: "수퇘지", 3: "거세"}
+GENDER_LABEL = {1: "암컷", 2: "수컷", 3: "거세"}
 
 
 def load_records() -> list[dict]:
