@@ -15,6 +15,16 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 - `vlm/train/inference.py` — `generate_report(..., postprocess=True)` 인자 추가 (기본 ON, 벤치마크용 OFF 가능)
 - `tests/test_postprocess.py` — 단위 테스트 18건 (정상 텍스트 미변경 + 비교 문맥 보존 회귀 포함)
 
+### Fixed — B2 thema_pa_VLM 결과 저장 경로 cwd 의존성 제거
+- `thema_pa_VLM/comm/rest_api.py` (별도 리포)
+  - `PROJECT_ROOT = Path(__file__).resolve().parent.parent` 추가
+  - `save_vlm_response_json` 의 `output_dir` 가 상대경로면 PROJECT_ROOT 기준으로 해석. 절대경로면 그대로.
+  - 효과: cwd 가 어디서 실행되든 결과 파일이 항상 thema_pa_VLM 루트의 같은 위치에 저장. 운영 시 systemd/스케줄러 cwd 가 임의여도 산출물 추적 끊김 없음.
+- `tests/test_thema_pa_vlm_bridge.py` — 회귀 테스트 2건 추가:
+  - `test_save_vlm_response_resolves_relative_path_under_project_root` — cwd 변경해도 PROJECT_ROOT 기준 저장 확인 + cwd 아래 잘못 생성 가드
+  - `test_save_vlm_response_absolute_path_unchanged` — 절대경로 명시 시 그대로 동작
+- 전체 79/79 PASS
+
 ### Changed — 학습 데이터 패턴 보강 (조사 + 성별 라벨)
 - **근본 원인 수정**: `livestock_train.json` 에 박혀 있던 `거세으로` 1,666건 + `암퇘지/수퇘지으로` 1,639건 (총 3,305건) 어색 패턴 제거
 - `vlm/train/convert_dataset.py`

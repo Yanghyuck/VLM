@@ -136,3 +136,72 @@ def test_thema_pa_rejects_invalid_vlm_response():
             "summary": "요약",
             "warnings": [],
         })
+
+
+def test_save_vlm_response_resolves_relative_path_under_project_root(
+    thema_pa_config, tmp_path, monkeypatch
+):
+    """B2 회귀 — 상대 `output_dir` 는 cwd 와 무관하게 thema_pa_VLM 루트 기준으로 해석.
+
+    수정 전 동작: cwd 를 바꾸면 `<cwd>/.tmp/...` 에 결과가 떨어졌음.
+    수정 후 동작: PROJECT_ROOT 기준으로 항상 thema_pa_VLM 루트 아래에 저장.
+    """
+    rest_api_module, _ = _load_rest_api_class()
+    payload = _load_json(SAMPLE_PATH)
+    response_json = {
+        "summary": "요약",
+        "grade_reason": None,
+        "warnings": [],
+        "recommendation": "권고",
+        "model_used": "lora (test)",
+    }
+
+    config_copy = json.loads(json.dumps(thema_pa_config))
+    rel_dir = Path(".tmp") / f"pytest-b2-{uuid4().hex}"
+    config_copy["vlm_api"]["output_dir"] = str(rel_dir)
+
+    # cwd 를 임시 디렉터리로 변경 — B2 미적용이라면 여기에 잘못 떨어졌을 것
+    monkeypatch.chdir(tmp_path)
+    saved_path = Path(rest_api_module.save_vlm_response_json(config_copy, payload, response_json))
+
+    project_root = rest_api_module.PROJECT_ROOT
+    expected_dir = (project_root / rel_dir).resolve()
+
+    try:
+        assert saved_path.parent.resolve() == expected_dir, (
+            f"저장 위치가 thema_pa_VLM 루트 기준이 아님. "
+            f"saved={saved_path}, expected_parent={expected_dir}"
+        )
+        # cwd 아래에 잘못 생성된 디렉터리가 없어야 함 (회귀 가드)
+        assert not (tmp_path / rel_dir).exists(), (
+            f"cwd 의존 회귀 — {tmp_path}/{rel_dir} 가 잘못 생성됨"
+        )
+    finally:
+        if saved_path.exists():
+            saved_path.unlink()
+        if expected_dir.exists() and not any(expected_dir.iterdir()):
+            expected_dir.rmdir()
+            # .tmp/ 부모도 비어 있으면 정리
+            parent = expected_dir.parent
+            if parent.name == ".tmp" and parent.exists() and not any(parent.iterdir()):
+                parent.rmdir()
+
+
+def test_save_vlm_response_absolute_path_unchanged(thema_pa_config, tmp_path):
+    """B2 회귀 — 절대경로 `output_dir` 는 그대로 사용 (외부 마운트 등 명시 경로 존중)."""
+    rest_api_module, _ = _load_rest_api_class()
+    payload = _load_json(SAMPLE_PATH)
+    response_json = {
+        "summary": "요약",
+        "grade_reason": None,
+        "warnings": [],
+        "recommendation": "권고",
+        "model_used": "lora (test)",
+    }
+
+    config_copy = json.loads(json.dumps(thema_pa_config))
+    abs_dir = tmp_path / "explicit_abs"
+    config_copy["vlm_api"]["output_dir"] = str(abs_dir)
+
+    saved_path = Path(rest_api_module.save_vlm_response_json(config_copy, payload, response_json))
+    assert saved_path.parent.resolve() == abs_dir.resolve()

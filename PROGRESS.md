@@ -389,7 +389,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 
 ## 테스트 현황
 
-**최종 결과: 77/77 통과** (2026-05-08 기준, 우선순위 2 학습 데이터 보강 후)
+**최종 결과: 79/79 통과** (2026-05-08 기준, 우선순위 2 학습 데이터 보강 + B2 cwd 회귀 가드 후)
 
 | 파일 | 테스트 수 | 대상 |
 |---|---|---|
@@ -400,7 +400,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 | `tests/test_auth.py` | 4 | X-API-Key 인증 (asyncio) |
 | `tests/test_logging.py` | 4 | JSON 구조적 로깅 |
 | `tests/test_env_override.py` | 7 | 환경변수 config override |
-| `tests/test_thema_pa_vlm_bridge.py` | 5 | thema_pa ↔ VLM 브릿지 (THEMA_PA_ROOT 미존재 시 skip) |
+| `tests/test_thema_pa_vlm_bridge.py` | 7 | thema_pa ↔ VLM 브릿지 + B2 cwd 회귀 (THEMA_PA_ROOT 미존재 시 skip) |
 | `tests/test_postprocess.py` | 18 | A3 조사 정규화 + A4 등급 정합성 + 통합 |
 | `tests/test_convert_dataset.py` | 16 | `_eul_ro` 종성 검사 + `_summary_response` 조사 회귀 가드 |
 
@@ -670,7 +670,7 @@ curl -X POST http://localhost:8000/v1/report \
 - [ ] **A4**: 등급 정합성 — 입력 `grade="등외"` 인데 모델이 "2 등급으로 판정" 출력. 학습 강화 또는 후처리에서 입력 grade 강제 주입.
 
 ### 우선순위 3 — 운영 보강 (선택)
-- [ ] **B2**: `thema_pa_VLM` 의 `save_vlm_response_json` 절대경로화 (현재 cwd 의존)
+- [x] **B2**: `thema_pa_VLM/comm/rest_api.py` 의 `save_vlm_response_json` PROJECT_ROOT 기준 절대경로화 — VLM 측 회귀 테스트 2건 추가 (전체 79/79). thema_pa_VLM 측 커밋·푸시는 사용자 보류.
 - [ ] **D3**: DB 비밀번호 변경 (사용자 수동, 이전 노출 사고 대응)
 - [ ] HTTPS 리버스 프록시 / Prometheus `/metrics` / Sentry — 운영 환경 의존
 
