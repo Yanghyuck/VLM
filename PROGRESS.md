@@ -664,8 +664,13 @@ curl -X POST http://localhost:8000/v1/report \
   - 백업: 이전 어색 조사 학습본 → `vlm/train/output/qwen3vl-lora-v2-prejosa/`
   - 메트릭: **train_loss 0.166** (v2-prejosa 0.187 대비 -11%), **eval_loss 0.079** (v2-prejosa 0.130 대비 **-42%** ⭐)
   - 558/558 step (3.0 epoch), eval_loss < train_loss → 과적합 없음
-  - 학습 데이터 정제(어색 조사 3,305건 제거 + 성별 라벨 통일) 효과가 메트릭에 그대로 반영
-  - 다음 단계: v1 vs v2-corrected 벤치마크 (held-out 50건) → 응답 품질 정량 비교
+  - 4-way 벤치 결과 + C5 in-context 예시로 환각 거의 해결
+- [~] **C1 v3 재학습 진행 중** (2026-05-09 시작, ~5시간)
+  - YAML: `vlm/train/qwen3vl_lora_v3.yaml` (rank 64→128, alpha 128→256, capacity 2배)
+  - 데이터: v2-corrected 와 동일한 정제된 livestock_train.json
+  - 출력: `vlm/train/output/qwen3vl-lora-v3/` (v2-corrected 와 별도, 보존)
+  - 로그: `vlm/train/training_v3.log`
+  - 다음 세션 진입 시 종료 확인 → v2-corrected vs v3 벤치마크
 
 ### 우선순위 2 — 응답 품질 (재학습/후처리, 무거움)
 - [ ] **A3**: 한국어 조사 정규화 — "거세으로" → "거세로", "1+으로 처리" → "1+로 처리". 학습 데이터 패턴 문제라 다음 학습 사이클 또는 응답 후처리 필터.
