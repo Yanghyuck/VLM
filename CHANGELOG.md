@@ -25,6 +25,16 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
   - `test_save_vlm_response_absolute_path_unchanged` — 절대경로 명시 시 그대로 동작
 - 전체 79/79 PASS
 
+### Added — C5 system_prompt few-shot 예시 (큰 효과로 채택)
+- `vlm/prompt/system_prompt.txt` — 정상 + 검출실패 in-context 예시 2개 추가
+- 학습된 모델임에도 **환각 잔재 거의 제거**
+  - backfat_error: "거세 암컷" 환각 사라짐
+  - entry_error: "거세 판정 오류" 환각 사라짐
+  - normal_case: "도체중 등급 하락 가능성" 도메인 깊이 ↑
+- 추론 시간 4-15% 증가 (입력 토큰 ↑) — 응답 품질 대비 미미
+- 후처리 메타필드(gender_conflict_detected 등) 트리거 안됨 = 응답 자체가 깨끗
+- C 카테고리 가장 큰 임팩트. 운영 default ON.
+
 ### Added — A3 reference paraphrase + A4 응답 다양성 메트릭
 - `vlm/train/convert_dataset.py` — `_summary_response_alt(meta)` 헬퍼 (등급/측정값 우선 순서 paraphrase)
 - `vlm/bench/dataset.py:_build_tasks` — `references` 리스트 (A3 paraphrase 1개 + 원본) 추가, `reference` 단일 필드는 호환성 유지
