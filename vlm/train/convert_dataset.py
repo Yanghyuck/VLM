@@ -120,6 +120,27 @@ def _summary_response(meta: dict) -> str:
     return f"{s1} {s2} {s3}"
 
 
+def _summary_response_alt(meta: dict) -> str:
+    """A3 — reference paraphrase 변형 (등급/측정값 우선 순서)."""
+    gender = GENDER_MAP.get(meta["gender"], "미상")
+    grade  = meta["grade"]
+    ec     = meta["error_code"]
+
+    errors = [label for key, (label, _) in ERROR_LABEL.items() if ec.get(key, 0) == 1]
+
+    s1 = f"도체번호 {meta['carcass_no']} 의 최종 판정 등급은 {grade} 입니다."
+    s2 = (f"{gender}{_eul_ro(gender)} "
+          f"{meta['slaughter_ymd'][:4]}년 {meta['slaughter_ymd'][4:6]}월 {meta['slaughter_ymd'][6:]}일 도축되었으며, "
+          f"도체중 {meta['body_weight']}kg, 등지방 {meta['backfat_average']}mm, "
+          f"뭇갈래근 {meta['multifidus_thk']}mm 가 측정되었습니다.")
+    if errors:
+        s3 = f"AI 검출 오류({', '.join(errors)})로 인해 신뢰도 저하 가능성이 있습니다."
+    else:
+        s3 = "모든 AI 검출이 정상 완료되었습니다."
+
+    return f"{s1} {s2} {s3}"
+
+
 def _grade_response(meta: dict) -> str:
     grade   = meta["grade"]
     backfat = meta["backfat_average"]

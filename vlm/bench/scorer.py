@@ -86,6 +86,28 @@ def compute_rouge_l(pred_text: str, ref_text: str) -> float:
         return -1.0
 
 
+def compute_rouge_l_max(pred_text: str, ref_texts: list[str]) -> float:
+    """A3 — paraphrase 여러 개 중 max ROUGE-L."""
+    if not ref_texts:
+        return -1.0
+    scores = [compute_rouge_l(pred_text, r) for r in ref_texts]
+    scores = [s for s in scores if s >= 0]
+    return max(scores) if scores else -1.0
+
+
+def compute_distinct_n(texts: list[str], n: int) -> float:
+    """A4 — distinct-N: 응답 모음의 unique n-gram / total n-gram (0~1)."""
+    all_ngrams: list[str] = []
+    for t in texts:
+        toks = (t or "").split()
+        if len(toks) < n:
+            continue
+        all_ngrams.extend(" ".join(toks[i : i + n]) for i in range(len(toks) - n + 1))
+    if not all_ngrams:
+        return 0.0
+    return len(set(all_ngrams)) / len(all_ngrams)
+
+
 def compute_bert_score(pred_texts: list[str], ref_texts: list[str]) -> float:
     try:
         from bert_score import score
@@ -108,22 +130,36 @@ def evaluate(records: list[dict]) -> dict:
     num_acc       = mean(numbers_cited(r.get("prediction"), r["metadata"]) for r in records)
     elapsed_avg   = mean(r.get("elapsed_sec", 0) for r in records)
 
-    # ROUGE-L (summary 태스크의 reference 와 비교)
-    rouge_scores = []
+    # ROUGE-L: 단일 reference + A3 paraphrase max
+    rouge_scores: list[float] = []
+    rouge_max_scores: list[float] = []
     pred_texts, ref_texts = [], []
     for r in records:
         if not r.get("prediction"):
             continue
-        ref = (r.get("tasks", {}).get("summary") or {}).get("reference", "")
+        summary_task = r.get("tasks", {}).get("summary") or {}
+        ref_single = summary_task.get("reference", "")
+        ref_list   = summary_task.get("references") or ([ref_single] if ref_single else [])
         pred = r["prediction"].get("3문장_요약", "")
-        if ref and pred:
-            rl = compute_rouge_l(pred, ref)
+        if not (pred and (ref_single or ref_list)):
+            continue
+        if ref_single:
+            rl = compute_rouge_l(pred, ref_single)
             if rl >= 0:
                 rouge_scores.append(rl)
             pred_texts.append(pred)
-            ref_texts.append(ref)
+            ref_texts.append(ref_single)
+        if ref_list:
+            rl_max = compute_rouge_l_max(pred, ref_list)
+            if rl_max >= 0:
+                rouge_max_scores.append(rl_max)
 
-    rouge_l_avg = mean(rouge_scores) if rouge_scores else -1.0
+    rouge_l_avg     = mean(rouge_scores)     if rouge_scores     else -1.0
+    rouge_l_max_avg = mean(rouge_max_scores) if rouge_max_scores else -1.0
+
+    # A4 — 응답 다양성 (distinct-1/2)
+    distinct_1 = compute_distinct_n(pred_texts, 1)
+    distinct_2 = compute_distinct_n(pred_texts, 2)
 
     # BERTScore (선택)
     bert_f1 = compute_bert_score(pred_texts, ref_texts) if pred_texts else -1.0
@@ -134,7 +170,10 @@ def evaluate(records: list[dict]) -> dict:
         "grade_match_rate":   round(grade_ok / n, 4),
         "number_citation":    round(num_acc, 4),
         "rouge_l":            round(rouge_l_avg, 4),
+        "rouge_l_max":        round(rouge_l_max_avg, 4),
         "bert_score_f1":      round(bert_f1, 4),
+        "distinct_1":         round(distinct_1, 4),
+        "distinct_2":         round(distinct_2, 4),
         "elapsed_avg_sec":    round(elapsed_avg, 2),
     }
 
@@ -168,8 +207,11 @@ def write_report(metrics_dict: dict[str, dict], output: Path, baseline_key: str 
         ("json_parse_rate",   "JSON 파싱 성공률"),
         ("grade_match_rate",  "등급 일치율"),
         ("number_citation",   "수치 인용 정확도"),
-        ("rouge_l",           "ROUGE-L (summary)"),
+        ("rouge_l",           "ROUGE-L (single ref)"),
+        ("rouge_l_max",       "ROUGE-L max (A3 paraphrase)"),
         ("bert_score_f1",     "BERTScore F1 (ko)"),
+        ("distinct_1",        "Distinct-1 (다양성, A4)"),
+        ("distinct_2",        "Distinct-2 (다양성, A4)"),
         ("elapsed_avg_sec",   "평균 추론 시간 (초)"),
     ]
 
@@ -201,8 +243,10 @@ def write_report(metrics_dict: dict[str, dict], output: Path, baseline_key: str 
         f.write("- **JSON 파싱 성공률**: 4 필드(`3문장_요약`, `비정상_근거`, `주의사항`, `권고`) 모두 존재 + summary 비어있지 않은 비율\n")
         f.write("- **등급 일치율**: 모델이 출력한 summary 안에 정답 grade 문자열(`1+`, `1`, `2`, `등외`)이 포함된 비율\n")
         f.write("- **수치 인용 정확도**: 등지방/뭇갈래근/도체중 숫자가 응답에 정확히 포함된 비율 (0~1)\n")
-        f.write("- **ROUGE-L**: 정답 요약과의 단어 시퀀스 일치도 (0~1)\n")
+        f.write("- **ROUGE-L (single ref)**: 단일 정답과의 단어 시퀀스 일치도 (0~1)\n")
+        f.write("- **ROUGE-L max (A3)**: paraphrase 정답들 중 max — 표현 다양성 보상\n")
         f.write("- **BERTScore F1 (ko)**: 한국어 BERT 임베딩 기반 의미 유사도 (0~1)\n")
+        f.write("- **Distinct-1/2 (A4)**: 응답 모음의 unique unigram/bigram 비율. 높으면 다양성 ↑\n")
         f.write(f"- **개선 % 계산 기준**: `{baseline_key}` 대비\n")
 
 

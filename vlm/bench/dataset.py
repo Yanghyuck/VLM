@@ -47,6 +47,7 @@ sys.path.insert(0, str(ROOT))
 from vlm.config import CFG
 from vlm.train.convert_dataset import (
     _summary_response,
+    _summary_response_alt,
     _grade_response,
     _abnormal_response,
     _is_normal,
@@ -87,9 +88,18 @@ def _row_to_meta(row: dict) -> dict:
 
 
 def _build_tasks(meta: dict) -> dict:
-    """메타데이터로부터 task별 prompt + reference 생성."""
+    """메타데이터로부터 task별 prompt + reference + paraphrase(A3) 생성.
+
+    `references` 는 같은 의미의 paraphrase 리스트 (max-ROUGE 기반 평가용),
+    `reference` 는 첫 paraphrase (하위 호환).
+    """
+    summary_refs = [_summary_response(meta), _summary_response_alt(meta)]
     tasks = {
-        "summary": {"prompt": TASK_PROMPTS["summary"], "reference": _summary_response(meta)},
+        "summary": {
+            "prompt": TASK_PROMPTS["summary"],
+            "reference": summary_refs[0],
+            "references": summary_refs,
+        },
         "grade":   {"prompt": TASK_PROMPTS["grade"],   "reference": _grade_response(meta)},
     }
     if not _is_normal(meta["error_code"]):

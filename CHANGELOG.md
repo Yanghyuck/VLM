@@ -25,6 +25,19 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
   - `test_save_vlm_response_absolute_path_unchanged` — 절대경로 명시 시 그대로 동작
 - 전체 79/79 PASS
 
+### Added — A3 reference paraphrase + A4 응답 다양성 메트릭
+- `vlm/train/convert_dataset.py` — `_summary_response_alt(meta)` 헬퍼 (등급/측정값 우선 순서 paraphrase)
+- `vlm/bench/dataset.py:_build_tasks` — `references` 리스트 (A3 paraphrase 1개 + 원본) 추가, `reference` 단일 필드는 호환성 유지
+- `vlm/bench/scorer.py`:
+  - `compute_rouge_l_max(pred, refs)` — paraphrase 들 중 max ROUGE-L
+  - `compute_distinct_n(texts, n)` — A4 distinct-1/2 다양성
+  - 리포트에 `rouge_l_max` / `distinct_1` / `distinct_2` 행 추가
+- 4-way 결과:
+  - ROUGE-L max: base 0.696→0.703 (paraphrase +1%), v2 어댑터들은 학습 패턴 강하게 매칭해 변화 없음
+  - **Distinct (응답 다양성)**: base > v1 > v2-corrected > v2-prejosa
+  - **v2-corrected vs v2-prejosa**: Distinct-1 +21% / Distinct-2 +21% — 데이터 정제로 표현 다양성 회복
+  - 종합: v2-corrected 가 학습 데이터 표면 모방을 덜 한다는 객관적 신호. ROUGE-L 미세 하락은 다양성 trade-off
+
 ### Added — D1 Constrained decoding 인프라 (default OFF, 회귀로 비채택)
 - `vlm/train/inference.py` — `RESPONSE_JSON_SCHEMA` + `generate_report(constrained=True)` 인자
 - transformers 5.x ↔ lm-format-enforcer 0.11.x 호환 monkey-patch 추가 (`PreTrainedTokenizerBase` 위치)
