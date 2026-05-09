@@ -57,8 +57,29 @@ import torch
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 from peft import PeftModel
 
+# transformers 5.x 호환 monkey-patch (lm-format-enforcer 0.11.x 가 4.x 위치 참조).
+# constrained 디코딩 import 전에 적용되어야 함.
+import transformers.tokenization_utils as _tok_utils
+if not hasattr(_tok_utils, "PreTrainedTokenizerBase"):
+    from transformers.tokenization_utils_base import PreTrainedTokenizerBase as _PTTB
+    _tok_utils.PreTrainedTokenizerBase = _PTTB
+
 from vlm.schema.thema_pa_output import ThemaPAOutput
 from vlm.config import CFG
+
+
+# D1 — Constrained decoding 용 응답 스키마 (lm-format-enforcer JsonSchemaParser).
+# generate_report 의 4 필드 dict 와 일치.
+RESPONSE_JSON_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "3문장_요약":   {"type": "string", "minLength": 1},
+        "비정상_근거": {"type": ["string", "null"]},
+        "주의사항":     {"type": "array", "items": {"type": "string"}},
+        "권고":         {"type": "string"},
+    },
+    "required": ["3문장_요약", "비정상_근거", "주의사항", "권고"],
+}
 
 BASE_MODEL_ID  = CFG.model.base_model_id
 ADAPTER_PATH   = str(Path(__file__).parent.parent.parent / CFG.paths.lora_adapter)
@@ -169,6 +190,7 @@ def generate_report(
     temperature: float = 0.3,
     top_p: float = 0.95,
     num_beams: int = 1,
+    constrained: bool = False,
 ) -> dict:
     """ThemaPAOutput → 한국어 판정 리포트 dict.
 
@@ -181,6 +203,7 @@ def generate_report(
         temperature: sampling=True 일 때 적용 (보수적 0.3 기본).
         top_p: sampling=True 일 때 적용.
         num_beams: 1 이면 greedy/sampling, >1 이면 beam search (D3). sampling=True 와 함께 쓸 수 없음.
+        constrained: True 면 lm-format-enforcer JSON Schema 강제 (D1). JSON 형식 깨짐 차단.
 
     반환 형식:
         {
@@ -264,6 +287,17 @@ def generate_report(
             num_beams=1,
             temperature=None,
             top_p=None,
+        )
+
+    if constrained:
+        # lazy import — 라이브러리 미설치 환경에서도 default 경로는 동작하도록.
+        from lmformatenforcer import JsonSchemaParser
+        from lmformatenforcer.integrations.transformers import (
+            build_transformers_prefix_allowed_tokens_fn,
+        )
+        parser = JsonSchemaParser(RESPONSE_JSON_SCHEMA)
+        gen_kwargs["prefix_allowed_tokens_fn"] = build_transformers_prefix_allowed_tokens_fn(
+            _processor.tokenizer, parser,
         )
 
     with torch.no_grad():

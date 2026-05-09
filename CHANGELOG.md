@@ -25,6 +25,23 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
   - `test_save_vlm_response_absolute_path_unchanged` — 절대경로 명시 시 그대로 동작
 - 전체 79/79 PASS
 
+### Added — D1 Constrained decoding 인프라 (default OFF, 회귀로 비채택)
+- `vlm/train/inference.py` — `RESPONSE_JSON_SCHEMA` + `generate_report(constrained=True)` 인자
+- transformers 5.x ↔ lm-format-enforcer 0.11.x 호환 monkey-patch 추가 (`PreTrainedTokenizerBase` 위치)
+- `tests/test_constrained_decoding.py` — 인프라 6 테스트 (스키마 + parser 빌드 + monkey-patch + default OFF)
+- `requirements`: lm-format-enforcer 설치 (수동 — `requirements.txt` 미반영, 향후 정리)
+- 스모크 결과: **회귀 발생** (`vlm/train/test_inference_constrained.md`)
+  - 모델이 학습 패턴으로 inner JSON 시작 → outer string 값에 박혀 응답 절단
+  - 운영 default 는 OFF 유지. 향후 prefix 강제 / propertyOrder 등 튜닝 후 재시도
+
+### Added — D2 sampling + D3 beam search 인자 (default OFF, 비채택)
+- `vlm/train/inference.py` — `sampling`/`temperature`/`top_p`/`num_beams` 인자
+- `scripts/test_inference_modes.py` — 3샘플 × 3모드 비교
+- 결과 (`vlm/train/test_inference_modes.md`):
+  - D2 sampling_t03: 검출 실패 케이스에서 반복 폭주 부활 (repetition_penalty=1.05 효과 약화) — 비채택
+  - D3 beam4: 학습 흔한 표현으로 회귀 (D5 가드 무시) — 케이스별 trade-off, 비채택
+  - greedy(default): 가장 일관됨, 운영 default 유지
+
 ### Added — D5 system_prompt 환각 가드 + D4 A5 성별 정합성 후처리
 - `vlm/prompt/system_prompt.txt` — "필수 준수사항" 4가지 추가
   1. 입력값 그대로 사용 (성별/등급/측정값 추론·변경 금지)
