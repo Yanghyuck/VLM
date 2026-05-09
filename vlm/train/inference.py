@@ -165,6 +165,10 @@ def generate_report(
     use_adapter: bool = True,
     adapter_path: str | None = None,
     postprocess: bool = True,
+    sampling: bool = False,
+    temperature: float = 0.3,
+    top_p: float = 0.95,
+    num_beams: int = 1,
 ) -> dict:
     """ThemaPAOutput → 한국어 판정 리포트 dict.
 
@@ -172,7 +176,11 @@ def generate_report(
         output: 도체 판정 결과
         use_adapter: True 면 LoRA 어댑터 적용, False 면 베이스 모델만 사용 (벤치마크용)
         adapter_path: 사용할 어댑터 경로 (None 이면 config 기본값)
-        postprocess: True 면 vlm.postprocess.apply_postprocess 적용 (A3 조사 정규화 + A4 등급 정합성)
+        postprocess: True 면 vlm.postprocess.apply_postprocess 적용 (A3/A4/A5)
+        sampling: True 면 nucleus sampling (D2). 기본 False(greedy).
+        temperature: sampling=True 일 때 적용 (보수적 0.3 기본).
+        top_p: sampling=True 일 때 적용.
+        num_beams: 1 이면 greedy/sampling, >1 이면 beam search (D3). sampling=True 와 함께 쓸 수 없음.
 
     반환 형식:
         {
@@ -233,16 +241,39 @@ def generate_report(
             return_tensors="pt",
         ).to(_model.device)
 
+    if sampling and num_beams > 1:
+        raise ValueError("sampling 과 beam search(num_beams>1) 는 동시에 쓸 수 없습니다.")
+
+    if sampling:
+        gen_kwargs = dict(
+            do_sample=True,
+            temperature=temperature,
+            top_p=top_p,
+            num_beams=1,
+        )
+    elif num_beams > 1:
+        gen_kwargs = dict(
+            do_sample=False,
+            num_beams=num_beams,
+            temperature=None,
+            top_p=None,
+        )
+    else:
+        gen_kwargs = dict(
+            do_sample=False,
+            num_beams=1,
+            temperature=None,
+            top_p=None,
+        )
+
     with torch.no_grad():
         output_ids = _model.generate(
             **inputs,
             max_new_tokens=512,
-            do_sample=False,
-            temperature=None,
-            top_p=None,
             # greedy 디코딩이 검출 실패 케이스에서 가끔 같은 토큰 시퀀스를 반복하는
             # 폭주 모드에 빠지는 사례 발견(스모크 backfat_error_case). 보수적인 1.05 로 차단.
             repetition_penalty=1.05,
+            **gen_kwargs,
         )
 
     generated = output_ids[:, inputs["input_ids"].shape[1]:]
