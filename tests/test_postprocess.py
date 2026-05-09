@@ -8,6 +8,8 @@ import pytest
 
 from vlm.postprocess import (
     apply_postprocess,
+    detect_gender_conflict,
+    enforce_gender,
     enforce_grade,
     normalize_josa,
 )
@@ -113,6 +115,80 @@ class TestEnforceGrade:
         )
         assert text == "이의 신청 가능: 1+ 등급"
         assert changed is False
+
+
+# ---------------------------------------------------------------------------
+# A5 — 성별 정합성
+# ---------------------------------------------------------------------------
+
+class TestEnforceGender:
+    def test_거세_입력_암컷_단언_교체(self):
+        # 입력 거세, 모델이 "암컷으로 판정" 환각 → "거세로 판정"
+        text, changed = enforce_gender("암컷으로 판정됨", "거세")
+        assert "암컷으로" not in text
+        assert "거세로 판정" in text
+        assert changed is True
+
+    def test_암컷_입력_거세_단언_교체(self):
+        # 입력 암컷, 모델이 "거세로 판정" → "암컷으로 판정"
+        text, changed = enforce_gender("거세로 판정되어야 합니다", "암컷")
+        assert "거세로" not in text
+        assert "암컷으로 판정" in text
+        assert changed is True
+
+    def test_입력과_같은_성별_미변경(self):
+        text, changed = enforce_gender("거세로 판정됨", "거세")
+        assert text == "거세로 판정됨"
+        assert changed is False
+
+    def test_비교_문맥_미변경(self):
+        # "X 기준" 같은 비교 표현은 보존 ('판정' 동사 부재)
+        original = "암컷 기준 17~25mm 적용"
+        text, changed = enforce_gender(original, "거세")
+        assert text == original
+        assert changed is False
+
+    def test_invalid_expected_gender(self):
+        text, changed = enforce_gender("암컷으로 판정", "invalid")
+        assert text == "암컷으로 판정"
+        assert changed is False
+
+
+class TestDetectGenderConflict:
+    def test_다른_성별_언급_검출(self):
+        # 입력 거세, 응답에 "암컷" 등장 → conflict
+        assert detect_gender_conflict("거세 암컷 판정 기준", "거세") is True
+
+    def test_동일_성별만_등장_미검출(self):
+        assert detect_gender_conflict("거세로 판정", "거세") is False
+
+    def test_성별_언급_없음_미검출(self):
+        assert detect_gender_conflict("등급은 1+ 입니다", "암컷") is False
+
+    def test_invalid_expected(self):
+        assert detect_gender_conflict("암컷", "invalid") is False
+
+
+class TestApplyPostprocessWithGender:
+    def test_성별_단언_교체_및_충돌_검출(self):
+        report = {
+            "비정상_근거": "비정상 진입으로 거세 암컷 판정 오류 발생",
+        }
+        result = apply_postprocess(report, expected_gender="거세")
+        # 단언 표현은 정정 (현재 메시지엔 명확한 단언 없음 → 변화 없음)
+        # 그러나 "암컷" 단어 잔존 → conflict 검출
+        assert result["_postprocess"]["gender_conflict_detected"] is True
+
+    def test_명확한_단언_정정(self):
+        report = {"비정상_근거": "거세로 판정되어야 합니다"}
+        result = apply_postprocess(report, expected_gender="암컷")
+        assert "거세로" not in result["비정상_근거"]
+        assert result["_postprocess"]["gender_enforced"] is True
+
+    def test_None_이면_A5_미적용(self):
+        report = {"비정상_근거": "거세 암컷 판정 오류"}
+        result = apply_postprocess(report, expected_gender=None)
+        assert "_postprocess" not in result  # 변경/검출 없음
 
 
 # ---------------------------------------------------------------------------

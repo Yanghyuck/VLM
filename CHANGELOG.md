@@ -25,6 +25,21 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
   - `test_save_vlm_response_absolute_path_unchanged` — 절대경로 명시 시 그대로 동작
 - 전체 79/79 PASS
 
+### Added — D5 system_prompt 환각 가드 + D4 A5 성별 정합성 후처리
+- `vlm/prompt/system_prompt.txt` — "필수 준수사항" 4가지 추가
+  1. 입력값 그대로 사용 (성별/등급/측정값 추론·변경 금지)
+  2. 검출 실패 항목을 "정상 완료"로 표현 금지
+  3. JSON 무결성 (코드블록·중복키 금지)
+  4. 같은 단어/구절 반복 금지 (5회 이상 등장 X)
+  - 효과: 스모크에서 "검출이 정상 완료" 환각 완전 해결 → "정상 완료되지 않아"로 정확 교정
+- `vlm/postprocess.py` — A5 성별 정합성
+  - `enforce_gender(text, expected_gender)` — "(다른성별)으로 판정" 단언만 입력 성별로 교체
+  - `detect_gender_conflict(text, expected_gender)` — 다른 성별 단어 등장 검출 (정정 X, 메타데이터)
+  - `apply_postprocess(..., expected_gender=)` — A5 통합 (`gender_enforced` / `gender_conflict_detected` 메타필드)
+- `vlm/train/inference.py` — `apply_postprocess` 에 `output.gender.label()` 자동 전달
+- `tests/test_postprocess.py` — A5 단위 테스트 12건 (전체 94/94 PASS)
+- 스모크 첫 실전 트리거: backfat_error 케이스의 "거세 암컷" 환각이 `gender_conflict_detected` 로 가시화
+
 ### Fixed — 추론 안정성 + A4 패턴 보강 (v2-corrected 스모크 회귀 대응)
 - `vlm/train/inference.py` — `generate(..., repetition_penalty=1.05)` 추가
   - 회귀 사례: 검출 실패 입력에서 greedy 디코딩이 같은 토큰 시퀀스 반복 폭주 (71s, 무한반복, 이중 JSON)

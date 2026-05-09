@@ -251,5 +251,9 @@ def generate_report(
     parsed = _extract_json(response)
     if postprocess:
         from vlm.postprocess import apply_postprocess
-        parsed = apply_postprocess(parsed, expected_grade=output.grade)
+        parsed = apply_postprocess(
+            parsed,
+            expected_grade=output.grade,
+            expected_gender=output.gender.label(),
+        )
     return parsed

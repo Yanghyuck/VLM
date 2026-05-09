@@ -23,6 +23,7 @@ import re
 from typing import Any, Callable
 
 VALID_GRADES: tuple[str, ...] = ("1+", "1", "2", "등외")
+VALID_GENDERS: tuple[str, ...] = ("암컷", "수컷", "거세")
 
 
 # A3 — 한국어 조사 정규화
@@ -84,6 +85,45 @@ def enforce_grade(text: str, expected_grade: str) -> tuple[str, bool]:
     return new_text, n > 0
 
 
+# A5 — 성별 정합성
+# 명확한 단언 패턴만 교체:
+#   (1) "<other>으로/로 판정" — 입력과 다른 성별을 판정 동사로 단언
+#   (2) "<other>으로/로 판정되어야" — 정정 표현 (모델이 잘못된 정정을 출력)
+# 비교/참조 ("X 기준", "X 대비")는 보존.
+def _gender_pattern(expected: str) -> re.Pattern[str]:
+    others = [g for g in VALID_GENDERS if g != expected]
+    if not others:
+        return re.compile(r"(?!)")
+    alt = "|".join(re.escape(g) for g in others)
+    # "거세" 받침 없음 → "거세로", 나머지("암컷"/"수컷") 받침 ㅅ → "으로"
+    return re.compile(
+        rf"(?P<g1>{alt})(?P<josa1>으로|로)(?=\s*판정)"
+    )
+
+
+def enforce_gender(text: str, expected_gender: str) -> tuple[str, bool]:
+    """성별 정합성. 입력과 다른 성별을 단언하는 패턴만 교체."""
+    if expected_gender not in VALID_GENDERS:
+        return text, False
+
+    expected_josa = "로" if expected_gender == "거세" else "으로"
+    pat = _gender_pattern(expected_gender)
+
+    def repl(m: re.Match[str]) -> str:
+        return f"{expected_gender}{expected_josa}"
+
+    new_text, n = pat.subn(repl, text)
+    return new_text, n > 0
+
+
+def detect_gender_conflict(text: str, expected_gender: str) -> bool:
+    """입력 성별과 다른 성별이 응답에 등장하는지 단순 검출 (정정 X, 메타데이터용)."""
+    if expected_gender not in VALID_GENDERS:
+        return False
+    others = [g for g in VALID_GENDERS if g != expected_gender]
+    return any(g in text for g in others)
+
+
 def _walk(obj: Any, fn: Callable[[str], tuple[str, bool]]) -> tuple[Any, bool]:
     """dict/list/str 트리의 모든 문자열에 fn 적용. 변경 누적."""
     if isinstance(obj, str):
@@ -107,15 +147,20 @@ def _walk(obj: Any, fn: Callable[[str], tuple[str, bool]]) -> tuple[Any, bool]:
     return obj, False
 
 
-def apply_postprocess(report: dict, expected_grade: str | None = None) -> dict:
-    """LoRA 응답 dict 에 A3 + A4 후처리를 일괄 적용.
+def apply_postprocess(
+    report: dict,
+    expected_grade: str | None = None,
+    expected_gender: str | None = None,
+) -> dict:
+    """LoRA 응답 dict 에 A3 + A4 + A5 후처리를 일괄 적용.
 
     Args:
         report: generate_report() 출력 (예: 4 필드 dict)
         expected_grade: 입력 ThemaPAOutput.grade — A4 적용 대상. None 이면 A3 만.
+        expected_gender: 입력 성별 라벨("암컷"/"수컷"/"거세") — A5 적용 대상.
 
     Returns:
-        후처리된 dict. 변경 발생 시 '_postprocess' 메타필드에 변경 종류 기록.
+        후처리된 dict. 변경/검출 발생 시 '_postprocess' 메타필드 기록.
     """
     new_report, josa_changed = _walk(report, normalize_josa)
 
@@ -125,12 +170,34 @@ def apply_postprocess(report: dict, expected_grade: str | None = None) -> dict:
             return enforce_grade(text, expected_grade)
         new_report, grade_changed = _walk(new_report, grade_fn)
 
-    if josa_changed or grade_changed:
+    gender_changed = False
+    gender_conflict = False
+    if expected_gender and expected_gender in VALID_GENDERS:
+        def gender_fn(text: str) -> tuple[str, bool]:
+            return enforce_gender(text, expected_gender)
+        new_report, gender_changed = _walk(new_report, gender_fn)
+
+        # 정정 후에도 다른 성별이 남아 있으면 잠재 환각 — 메타데이터로만 노출
+        def conflict_walk(obj):
+            if isinstance(obj, str):
+                return detect_gender_conflict(obj, expected_gender)
+            if isinstance(obj, list):
+                return any(conflict_walk(x) for x in obj)
+            if isinstance(obj, dict):
+                return any(conflict_walk(v) for v in obj.values())
+            return False
+        gender_conflict = conflict_walk(new_report)
+
+    if josa_changed or grade_changed or gender_changed or gender_conflict:
         meta = dict(new_report.get("_postprocess", {}))
         if josa_changed:
             meta["josa_normalized"] = True
         if grade_changed:
             meta["grade_enforced"] = True
+        if gender_changed:
+            meta["gender_enforced"] = True
+        if gender_conflict:
+            meta["gender_conflict_detected"] = True
         new_report["_postprocess"] = meta
 
     return new_report

@@ -389,7 +389,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 
 ## 테스트 현황
 
-**최종 결과: 82/82 통과** (2026-05-09, A 보완 — repetition_penalty + A4 새 패턴 후)
+**최종 결과: 94/94 통과** (2026-05-09, D5 prompt 가드 + D4 A5 성별 정합성 후처리 후)
 
 | 파일 | 테스트 수 | 대상 |
 |---|---|---|
@@ -401,7 +401,7 @@ python scripts/test_e2e_thema_pa_bridge.py
 | `tests/test_logging.py` | 4 | JSON 구조적 로깅 |
 | `tests/test_env_override.py` | 7 | 환경변수 config override |
 | `tests/test_thema_pa_vlm_bridge.py` | 7 | thema_pa ↔ VLM 브릿지 + B2 cwd 회귀 (THEMA_PA_ROOT 미존재 시 skip) |
-| `tests/test_postprocess.py` | 21 | A3 조사 정규화 + A4 등급 정합성(이의신청 패턴 포함) + 통합 |
+| `tests/test_postprocess.py` | 33 | A3 조사 + A4 등급(이의신청) + A5 성별 정합성/충돌검출 + 통합 |
 | `tests/test_convert_dataset.py` | 16 | `_eul_ro` 종성 검사 + `_summary_response` 조사 회귀 가드 |
 
 **End-to-End 검증 스크립트**
