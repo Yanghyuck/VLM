@@ -236,6 +236,7 @@ def convert(
     limit: int | None = None,
     output_path: Path = OUTPUT_PATH,
     exclude_ids: set[str] | None = None,
+    input_path: Path | None = None,
 ) -> None:
     """dataset.jsonl 을 ShareGPT 학습 JSON 으로 변환.
 
@@ -243,9 +244,12 @@ def convert(
         limit: 처리할 최대 원본 레코드 수
         output_path: 출력 경로
         exclude_ids: 학습 제외할 도체번호 set (벤치마크 held-out 용)
+        input_path: 입력 jsonl (기본 None → INPUT_PATH). v4 augmented 데이터처럼
+                    별도 입력 사용 시 명시.
     """
-    if not INPUT_PATH.exists():
-        print(f"[ERROR] {INPUT_PATH} 없음. 먼저 scripts/build_dataset.py 실행 필요.")
+    src = input_path if input_path else INPUT_PATH
+    if not src.exists():
+        print(f"[ERROR] {src} 없음. 먼저 scripts/build_dataset.py 실행 필요.")
         sys.exit(1)
 
     exclude_ids = exclude_ids or set()
@@ -253,7 +257,7 @@ def convert(
     skipped = 0
     excluded_count = 0
 
-    with open(INPUT_PATH, encoding="utf-8") as f:
+    with open(src, encoding="utf-8") as f:
         for line in f:
             if limit and len(records) >= limit * 3:
                 break
@@ -313,6 +317,7 @@ def convert(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--input",  type=str, help="입력 jsonl (기본: config.json paths.dataset_jsonl)")
     parser.add_argument("--limit",  type=int, help="변환할 최대 원본 레코드 수")
     parser.add_argument("--output", type=str, help="출력 경로 (기본: vlm/data/livestock_train.json)")
     parser.add_argument("--exclude-eval-set", type=str,
@@ -326,5 +331,6 @@ if __name__ == "__main__":
                 exclude_ids.add(str(json.loads(line)["id"]))
         print(f"제외할 평가셋 ID 로드: {len(exclude_ids)}건")
 
+    inp = Path(args.input) if args.input else None
     out = Path(args.output) if args.output else OUTPUT_PATH
-    convert(limit=args.limit, output_path=out, exclude_ids=exclude_ids)
+    convert(limit=args.limit, output_path=out, exclude_ids=exclude_ids, input_path=inp)

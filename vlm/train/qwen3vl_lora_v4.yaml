@@ -1,0 +1,64 @@
+### v4 — 검출 실패 합성 데이터 보강 (rank 64, v3 회귀 회피)
+###
+### 핵심 변경 (v2-corrected → v4):
+### - 학습 데이터: livestock_train.json (6,610) → livestock_train_v4.json (8,110)
+###   * 합성 검출 실패 케이스 500건 추가 (abnormal task 0 → 500)
+###   * 등급 분포에 등외/2 등급 합성 추가
+### - LoRA rank/alpha: 64/128 유지 (v3 의 33h 회귀 방지 — 데이터 보강이 우선)
+### - 출력 디렉터리: qwen3vl-lora-v4/ (v2-corrected 보존)
+###
+### B2 분석(`vlm/bench/error_distribution.md`) 결정에 따른 데이터 측 환각 해결.
+
+### 모델
+model_name_or_path: Qwen/Qwen3-VL-8B-Instruct
+
+### 학습 방법
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 64                            # v2-corrected 와 동일 (v3 의 33h 회귀 회피)
+lora_alpha: 128                          # alpha/rank=2 비율
+lora_dropout: 0.05
+lora_target: all
+
+### Vision 학습 (v2-corrected 와 동일)
+freeze_vision_tower: false
+freeze_multi_modal_projector: false
+
+### 데이터셋 (v4 — 합성 검출 실패 보강)
+dataset: livestock_ko_v4
+dataset_dir: C:/Users/IPC/Desktop/git/LLaMA-Factory/data
+template: qwen3_vl_nothink
+cutoff_len: 1024
+max_samples: 30000
+overwrite_cache: true
+preprocessing_num_workers: 1
+
+### 출력 (v4 별도 디렉터리)
+output_dir: vlm/train/output/qwen3vl-lora-v4
+logging_steps: 10
+save_steps: 200
+save_total_limit: 3
+plot_loss: true
+overwrite_output_dir: true
+
+### 학습 하이퍼파라미터 (v2-corrected 와 동일)
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 32
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000
+dataloader_num_workers: 0
+
+### 검증
+val_size: 0.1
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 200
+
+### 이미지
+image_max_pixels: 100352
+video_max_pixels: 50176
