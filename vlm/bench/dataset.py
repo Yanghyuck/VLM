@@ -50,6 +50,7 @@ from vlm.train.convert_dataset import (
     _summary_response_alt,
     _grade_response,
     _abnormal_response,
+    _abnormal_response_all,
     _is_normal,
 )
 
@@ -103,7 +104,12 @@ def _build_tasks(meta: dict) -> dict:
         "grade":   {"prompt": TASK_PROMPTS["grade"],   "reference": _grade_response(meta)},
     }
     if not _is_normal(meta["error_code"]):
-        tasks["abnormal"] = {"prompt": TASK_PROMPTS["abnormal"], "reference": _abnormal_response(meta)}
+        abn_refs = _abnormal_response_all(meta)
+        tasks["abnormal"] = {
+            "prompt":     TASK_PROMPTS["abnormal"],
+            "reference":  abn_refs[0],
+            "references": abn_refs,
+        }
     return tasks
 
 

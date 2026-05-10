@@ -171,6 +171,7 @@ def _grade_response(meta: dict) -> str:
 
 
 def _abnormal_response(meta: dict) -> str:
+    """원본 형태 — 번호 매긴 항목 리스트 + 권고 마무리."""
     ec     = meta["error_code"]
     failed = [(label, desc) for key, (label, desc) in ERROR_LABEL.items() if ec.get(key, 0) == 1]
 
@@ -179,6 +180,52 @@ def _abnormal_response(meta: dict) -> str:
         lines.append(f"{i}. **{label}**: {desc}")
     lines.append("\n재촬영 또는 수동 측정을 통해 정확한 등급 판정을 권고합니다.")
     return "\n".join(lines)
+
+
+def _abnormal_response_narrative(meta: dict) -> str:
+    """B1 변형 — 자연어 서술형 (번호 없이 문장 결합)."""
+    ec     = meta["error_code"]
+    failed = [(label, desc) for key, (label, desc) in ERROR_LABEL.items() if ec.get(key, 0) == 1]
+
+    if not failed:
+        return "검출 결과 비정상 항목은 발견되지 않았습니다."
+
+    if len(failed) == 1:
+        label, desc = failed[0]
+        return f"본 도체에서는 {label}가 발생했습니다. {desc} 정확한 판정을 위해 재촬영 또는 수동 측정이 필요합니다."
+
+    labels_str = ", ".join(label for label, _ in failed)
+    descs = " ".join(desc for _, desc in failed)
+    return (f"본 도체에서는 {labels_str} 등 {len(failed)}건의 비정상이 동시에 발생했습니다. "
+            f"{descs} 측정값 신뢰도가 크게 저하되어 재촬영 또는 수동 측정이 필요합니다.")
+
+
+def _abnormal_response_recommend_first(meta: dict) -> str:
+    """B1 변형 — 권고 우선형 (재촬영 권고가 먼저, 사유 뒤)."""
+    ec     = meta["error_code"]
+    failed = [(label, desc) for key, (label, desc) in ERROR_LABEL.items() if ec.get(key, 0) == 1]
+
+    if not failed:
+        return "별도 조치 없이 정상 출하 가능합니다."
+
+    labels_str = ", ".join(label for label, _ in failed)
+    lines = [f"재촬영 또는 수동 측정을 권고드립니다. 사유는 다음과 같습니다:\n"]
+    for label, desc in failed:
+        lines.append(f"- {label}: {desc}")
+    lines.append(f"\n총 {len(failed)}건의 검출 오류({labels_str})로 인해 등급 판정의 정확성을 보장할 수 없습니다.")
+    return "\n".join(lines)
+
+
+def _abnormal_response_all(meta: dict) -> list[str]:
+    """B1 — 학습 데이터/평가 reference 용 abnormal 응답 paraphrase 모음.
+
+    첫 번째가 default(이전 호환 reference). 나머지는 paraphrase.
+    """
+    return [
+        _abnormal_response(meta),
+        _abnormal_response_narrative(meta),
+        _abnormal_response_recommend_first(meta),
+    ]
 
 
 def _is_normal(ec: dict) -> bool:
