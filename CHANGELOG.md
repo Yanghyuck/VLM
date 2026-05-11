@@ -35,6 +35,16 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 - 후처리 메타필드(gender_conflict_detected 등) 트리거 안됨 = 응답 자체가 깨끗
 - C 카테고리 가장 큰 임팩트. 운영 default ON.
 
+### Trained — v4 LoRA 어댑터 (데이터 보강 + abnormal 학습) — **운영 권장**
+- `vlm/train/qwen3vl_lora_v4.yaml` — rank 64 유지, 데이터만 v4 augmented (8,110 샘플)
+- 학습 시간 **6h 19m** (v3 34h 대비 **1/5.7**)
+- 메트릭: train_loss 0.160 / eval_loss 0.077 — v2-corrected 동등, over-fit 없음
+- 6-way 벤치 (held-out 50건, 100% 정상): ROUGE/BERT/Distinct 모두 v3 동일 — 정상 케이스에서 동등 성능
+- **검출 실패 스모크** (`vlm/train/test_inference_v4.md`) — **환각 근본 해결**
+  - backfat_error: "거세 암컷" 환각 사라짐, 검출 실패 항목 명시
+  - entry_error: "거세 판정 오류" 환각 사라짐, 비정상 진입 명확
+- **운영 권장 변경: v2-corrected → v4**
+
 ### Trained — v3 LoRA 어댑터 (rank 128/alpha 256) — **over-fit 입증, 비채택**
 - `vlm/train/qwen3vl_lora_v3.yaml` — rank 64→128, alpha 128→256 (capacity 2배)
 - 학습 시간 **34h 15m** (v2-corrected 5h 2m 대비 6.8배 회귀) — GPU 메모리 한계 + Vision LoRA 곱셈 부담

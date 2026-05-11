@@ -665,13 +665,14 @@ curl -X POST http://localhost:8000/v1/report \
   - 메트릭: **train_loss 0.166** (v2-prejosa 0.187 대비 -11%), **eval_loss 0.079** (v2-prejosa 0.130 대비 **-42%** ⭐)
   - 558/558 step (3.0 epoch), eval_loss < train_loss → 과적합 없음
   - 4-way 벤치 결과 + C5 in-context 예시로 환각 거의 해결
-- [~] **B v4 재학습 진행 중** (2026-05-11 09:44 시작, ~5h 예상)
-  - YAML: `vlm/train/qwen3vl_lora_v4.yaml` (rank 64, 데이터만 v4 augmented)
-  - 데이터: 8,110 샘플 (원본 6,610 + 합성 검출 실패 500 + abnormal task 500 포함)
-  - 출력: `vlm/train/output/qwen3vl-lora-v4/`
-  - 로그: `vlm/train/training_v4.log`
-  - 첫 점검: 데이터 로드 + tokenize OK, GPU 인식 OK
-  - 종료 후 자동: `runner.py --tag lora_v4 --adapter-path .../qwen3vl-lora-v4 --n 50 → scorer 6-way (base/v1/v2-prejosa/v2-corrected/v3/v4)`
+- [x] **B v4 재학습 완료 + 6-way 벤치 + 검출실패 스모크** (2026-05-11)
+  - 학습: 6h 19m (rank 64, 8,110 샘플 / 687 step / 3 epoch)
+  - 메트릭: train_loss **0.160** / eval_loss **0.077** (v2-corrected 와 비슷, over-fit 없음)
+  - 6-way 벤치 (held-out 50건, 100% 정상): v3 와 동일 (ROUGE 1.0/BERT 1.0/Distinct 0.118/0.230)
+  - **검출 실패 스모크** (`vlm/train/test_inference_v4.md`): **환각 근본 해결** ⭐
+    - backfat_error: "거세 암컷" 환각 사라짐, 검출 실패 항목 정확 명시
+    - entry_error: "거세 판정 오류" 환각 사라짐, 비정상 진입 명확
+  - **운영 권장: v2-corrected → v4 변경**. 학습 비용 1/5.7 (v3 대비), 환각 직접 해결.
 
 - [x] **C1 v3 재학습 완료** (2026-05-09 15:17 → 2026-05-11 01:32, **34h 15m**)
   - YAML: `vlm/train/qwen3vl_lora_v3.yaml` (rank 64→128, alpha 128→256, capacity 2배)
