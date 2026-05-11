@@ -35,6 +35,17 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 - 후처리 메타필드(gender_conflict_detected 등) 트리거 안됨 = 응답 자체가 깨끗
 - C 카테고리 가장 큰 임팩트. 운영 default ON.
 
+### Trained — v3 LoRA 어댑터 (rank 128/alpha 256) — **over-fit 입증, 비채택**
+- `vlm/train/qwen3vl_lora_v3.yaml` — rank 64→128, alpha 128→256 (capacity 2배)
+- 학습 시간 **34h 15m** (v2-corrected 5h 2m 대비 6.8배 회귀) — GPU 메모리 한계 + Vision LoRA 곱셈 부담
+- 메트릭: train_loss 0.147 (-11%), eval_loss 0.072 (-9% vs v2-corrected) — 표면적 개선
+- **5-way 벤치 결정적 진단**:
+  - ROUGE-L 1.0000 + BERTScore 1.0000 = 학습 reference 완전 암기
+  - Distinct-1 -34.9% / Distinct-2 -30.5% (vs base) = 응답 표현 다양성 상실
+  - eval_loss 가 train_loss 보다 낮은 건 val_size=0.1 (train 의 in-distribution 일부)
+- **운영 비채택** — capacity 증가가 환각 해결이 아닌 표면 암기로 귀결. v2-corrected 가 다양성/속도/비용에서 우위.
+- v3 가 입증한 것: 환각의 진짜 해결책은 **학습 데이터 다양화 (B 카테고리, v4)** 이지 capacity 증가가 아님
+
 ### Added — A3 reference paraphrase + A4 응답 다양성 메트릭
 - `vlm/train/convert_dataset.py` — `_summary_response_alt(meta)` 헬퍼 (등급/측정값 우선 순서 paraphrase)
 - `vlm/bench/dataset.py:_build_tasks` — `references` 리스트 (A3 paraphrase 1개 + 원본) 추가, `reference` 단일 필드는 호환성 유지
