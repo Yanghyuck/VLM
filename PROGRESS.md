@@ -665,14 +665,13 @@ curl -X POST http://localhost:8000/v1/report \
   - 메트릭: **train_loss 0.166** (v2-prejosa 0.187 대비 -11%), **eval_loss 0.079** (v2-prejosa 0.130 대비 **-42%** ⭐)
   - 558/558 step (3.0 epoch), eval_loss < train_loss → 과적합 없음
   - 4-way 벤치 결과 + C5 in-context 예시로 환각 거의 해결
-- [x] **B 카테고리 v4 학습 데이터 보강 준비 완료** (2026-05-10)
-  - B2 분석 결과: 학습 데이터 100% 정상 (검출 실패 0건, 등외 0건) — 환각 근본 원인
-  - `scripts/augment_error_cases.py` — 정상 케이스에서 합성 검출 실패 500건 생성
-  - `vlm/data/livestock_train_v4.json` 8,110 샘플 (summary 3,805 / grade 3,805 / **abnormal 500** ⭐)
-  - LLaMA-Factory `data/livestock_train_v4.json` 복사 + `dataset_info.json` 에 `livestock_ko_v4` 등록
-  - YAML: `vlm/train/qwen3vl_lora_v4.yaml` (rank 64 유지, v3 의 33h 회귀 회피 — 데이터 보강이 우선)
-  - 학습 명령: `conda run -n vlm --no-capture-output llamafactory-cli train vlm/train/qwen3vl_lora_v4.yaml`
-  - **v3 종료 후 시작 가능** (GPU 충돌 피하기 위해 순차)
+- [~] **B v4 재학습 진행 중** (2026-05-11 09:44 시작, ~5h 예상)
+  - YAML: `vlm/train/qwen3vl_lora_v4.yaml` (rank 64, 데이터만 v4 augmented)
+  - 데이터: 8,110 샘플 (원본 6,610 + 합성 검출 실패 500 + abnormal task 500 포함)
+  - 출력: `vlm/train/output/qwen3vl-lora-v4/`
+  - 로그: `vlm/train/training_v4.log`
+  - 첫 점검: 데이터 로드 + tokenize OK, GPU 인식 OK
+  - 종료 후 자동: `runner.py --tag lora_v4 --adapter-path .../qwen3vl-lora-v4 --n 50 → scorer 6-way (base/v1/v2-prejosa/v2-corrected/v3/v4)`
 
 - [x] **C1 v3 재학습 완료** (2026-05-09 15:17 → 2026-05-11 01:32, **34h 15m**)
   - YAML: `vlm/train/qwen3vl_lora_v3.yaml` (rank 64→128, alpha 128→256, capacity 2배)
