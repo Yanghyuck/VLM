@@ -7,9 +7,39 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+### Added — 자유 chat CLI (옵션 A)
+- `scripts/chat_vlm.py` — 멀티턴 + 이미지 첨부 (`/image PATH`) + LoRA 토글
+  - `--use-adapter` 로 v4 LoRA 적용, 기본은 베이스 Qwen3-VL-8B (일반 chat 권장)
+  - 세션 명령: `/image PATH`, `/clear`, `/quit` (또는 `/q`)
+  - `image_max_pixels=200,704` 자동 LANCZOS 리사이즈 (학습 일치)
+  - Windows cp949 회피: stdout/stderr utf-8 강제
+  - 스모크: 텍스트만 3.4s/33t, 이미지+텍스트 4.8s/48t
+  - 주의: VLM FastAPI 서버 가동 중이면 GPU OOM (먼저 종료)
+
+### Added — thema_pa_VLM 끝단 운영 흐름 9건 검증 (2026-05-15)
+- `scripts/run_pa_then_vlm_on_new_images.py` — Phase A (PA) + Phase B (VLM) 통합 스크립트
+  - **Phase A (ThematecPA)**: 새 ORI 이미지 9건 → YOLO 6 + gender + rightside + inpaint → AI 이미지 9/9 생성 (init 2.8s + 평균 0.8s/건)
+  - **Phase B (SendVLMReport)**: AI 이미지 9건 → 운영 RestAPI 클래스 호출 → **9/9 PASS** (평균 18.9s/req)
+  - **Phase B-ORI** (대체 모드): PA 가동 불가 환경 우회 — ORI 직호출 9/9 PASS (평균 19.1s/req)
+- 산출물: `thema_pa_VLM/images/AI_run/0716_ai_*.jpg` + `storage/vlm_reports/20260212_{3..17}_vlm_report.json`
+- 응답 품질: 환각 없음, 성별·등급 일관 ("암컷"/"1+"), 정상 케이스 톤 일관 ("정상 출하 처리하세요")
+- 입증 흐름: ORI → ThematecPA(YOLO+gender+rightside+inpaint) → AI 결과 → SendVLMReport → VLM v4 → 한국어 리포트 → 저장
+
+### Fixed — thema_pa_VLM `_resolve_vlm_grade` 시그니처 모순 (별도 리포)
+- `business/thematec_pcw.py` — `@staticmethod` + `def _resolve_vlm_grade(self, result, ...)` 모순으로 운영 호출 시 `TypeError`
+- 호출부 (`self._resolve_vlm_grade(result, ...)`) 와 정렬되도록 `@staticmethod` 제거 → instance method
+- 본 회차 검증 전엔 RestAPI 직호출(E2E 우회 경로)만 검증해서 미발견. 운영 호출 흐름 점검에서 발견·수정.
+
+### Changed — thema_pa_VLM `_send_vlm_api` 비동기화 (별도 리포)
+- `business/thematec_pcw.py` — `import threading` + `_worker()` 클로저를 `daemon Thread` 로 위임
+- 이유: 도체당 ~25s 동기 호출이 도축 라인 처리 속도(시간당 100-200마리, ≈20s/마리) 와 충돌
+- 검증: 모킹 스모크에서 두 호출 4.9ms 즉시 반환, 워커 2개 병렬 시작 (간격 0.6ms), 2초 후 전부 종료, 워커 leak 없음
+- thema_pa_VLM 측 커밋·푸시는 사용자 검토 후 (메모리 규칙 B2 정책)
+
 ### 향후 계획
-- v1.2.0 GitHub Release 페이지는 `v1.2.0` 태그 푸시 후 웹 UI 에서 작성 (gh CLI 미설치)
-- thema_pa_VLM 운영 파이프라인(`main.py`/`pcw_main.py`)에서 `SendVLMReport` 자동 트리거 검증
+- v1.2.0 GitHub Release 페이지는 웹 UI 에서 작성 (gh CLI 미설치)
+- chat CLI 의 B/C 확장 — FastAPI `/v1/chat` 엔드포인트, Streamlit chat UI
+- thema_pa_VLM 측 변경(_resolve_vlm_grade 수정 + 비동기화) 사용자 검토·커밋
 
 ---
 

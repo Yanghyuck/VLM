@@ -44,9 +44,13 @@ held-out 정상 케이스 점수는 v2/v3와 동등하지만, **검출 실패 �
 | 학습 시간 | 5h 02m | 34h 15m | 6h 19m |
 | train_loss / eval_loss | 0.166 / 0.079 | 0.147 / 0.072 | **0.160 / 0.077** |
 | 검출 실패 환각 | 일부 잔존 | 일부 잔존 | **사라짐** ⭐ |
-| thema_pa_VLM E2E | 4/4 PASS | — | **4/4 PASS** (avg 25.7s) |
+| thema_pa_VLM E2E (4 샘플) | 4/4 PASS | — | **4/4 PASS** (avg 25.7s) |
+| 끝단 운영 흐름 (PA→VLM, 9 샘플) | — | — | **9/9 PASS** (avg 18.9s) |
 
 운영 어댑터 경로: `vlm/train/output/qwen3vl-lora-v4/` (`config.json` `paths.lora_adapter`)
+
+**끝단 운영 흐름 검증** (`scripts/run_pa_then_vlm_on_new_images.py`):
+새 ORI 이미지 → `ThematecPA`(YOLO 6 + gender + rightside + inpaint) → AI 결과 이미지 → `SendVLMReport` → VLM v4 → 한국어 리포트 → 저장. 9건 모두 환각 없이 일관된 응답.
 
 상세 결과: [`vlm/bench/score_report.md`](./vlm/bench/score_report.md), [`failure_analysis.md`](./vlm/bench/failure_analysis.md), [`quantization_report.md`](./vlm/train/quantization_report.md)
 
@@ -111,6 +115,7 @@ pytest tests/                        # ✅ 43 passed
 # 3. 실행 (학습 완료 후)
 streamlit run vlm/demo/app.py        # 데모 UI        : http://localhost:8501
 python vlm/api/server.py             # FastAPI 서버   : http://localhost:8000/docs
+python scripts/chat_vlm.py           # 자유 chat CLI  (베이스 Qwen3-VL, 이미지 첨부 지원)
 ```
 
 ---

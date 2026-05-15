@@ -684,6 +684,36 @@ curl -X POST http://localhost:8000/v1/report \
   - 저장 검증: `thema_pa_VLM/storage/vlm_reports/{ymd}_{pigno}_vlm_report.json` 4건 모두 생성
   - 환각 해결 운영 흐름에서도 재현: backfat_error_case 응답이 "암컷" + "검출 실패" 정확 명시
 
+- [x] **thema_pa_VLM 끝단 운영 흐름 — 새 이미지 9건 PA→VLM 검증** (2026-05-15)
+  - `scripts/run_pa_then_vlm_on_new_images.py` — Phase A (PA) + Phase B (VLM) 통합
+  - **Phase A (ThematecPA)** — 9/9 AI 이미지 생성
+    - 새 ORI 9건 (`thema_pa_VLM/images/0716_ori_*`, pigno 3~17, 2026-02-12 도축)
+    - YOLO 6 + gender + rightside + inpaint 모두 정상 로드 (init 2.8s)
+    - 평균 0.8s/건 (init 후), 산출 → `thema_pa_VLM/images/AI_run/0716_ai_*.jpg`
+  - **Phase B (SendVLMReport)** — **9/9 PASS**
+    - 운영 RestAPI 클래스 사용, 평균 18.9s/req
+    - 응답 4 필드 + `model_used` 모두 정상, 환각 없음, 성별·등급 일관 ("암컷"/"1+")
+    - 저장 → `thema_pa_VLM/storage/vlm_reports/20260212_{3..17}_vlm_report.json`
+  - **Phase B-ORI** (대체 모드, PA 가동 불가 환경 우회): ORI 직호출도 9/9 PASS (평균 19.1s/req)
+  - 입증 흐름: ORI → ThematecPA(YOLO+gender+rightside+inpaint) → AI 결과 → SendVLMReport → VLM v4 → 한국어 리포트 → 저장
+
+- [x] **thema_pa_VLM `_resolve_vlm_grade` 시그니처 모순 발견·수정** (2026-05-15, 별도 리포)
+  - `business/thematec_pcw.py` 의 `@staticmethod` + `def _resolve_vlm_grade(self, result, ...)` 모순으로 운영 호출 시 `TypeError`
+  - 호출부(`self._resolve_vlm_grade(result, ...)`) 와 정렬되도록 `@staticmethod` 제거 → instance method
+  - E2E 가 RestAPI 직호출(우회 경로)만 검증해서 미발견 — 운영 호출 흐름 점검에서 발견
+  - thema_pa_VLM 측 커밋·푸시는 사용자 검토 후 (메모리 규칙 B2 정책)
+
+- [x] **thema_pa_VLM `_send_vlm_api` 비동기화** (2026-05-15, 별도 리포)
+  - `business/thematec_pcw.py` — `import threading` + `_worker()` 클로저를 daemon Thread 로 위임
+  - 이유: 도체당 ~25s 동기 호출이 도축 라인 처리 속도(시간당 100-200마리, ≈20s/마리) 와 충돌
+  - 검증: 모킹 스모크에서 두 호출 4.9ms 즉시 반환, 워커 2개 병렬 시작, 워커 leak 없음
+
+- [x] **자유 chat CLI** (`scripts/chat_vlm.py`, 2026-05-15)
+  - 멀티턴 + 이미지 첨부 (`/image PATH`) + LoRA 토글 (`--use-adapter`)
+  - 베이스 권장 (Qwen3-VL-8B 일반 chat). LoRA 적용 시 도체 도메인 톤으로 빠질 수 있음
+  - 스모크: 텍스트만 3.4s/33t, 이미지+텍스트 4.8s/48t
+  - 주의: VLM FastAPI 서버 가동 중이면 GPU OOM (먼저 종료 필요)
+
 - [x] **C1 v3 재학습 완료** (2026-05-09 15:17 → 2026-05-11 01:32, **34h 15m**)
   - YAML: `vlm/train/qwen3vl_lora_v3.yaml` (rank 64→128, alpha 128→256, capacity 2배)
   - 출력: `vlm/train/output/qwen3vl-lora-v3/adapter_model.safetensors`
