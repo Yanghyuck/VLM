@@ -261,12 +261,19 @@ _cache_misses = 0
 
 
 def _cache_key(req: "ReportRequest", validated_path: Optional[str]) -> str:
+    # 원본 result_image_path 는 슬래시 차이(\ vs /)로 같은 파일도 다른 key 가 되므로
+    # payload 에서 빼고 정규화된 validated_path + 파일 mtime/size 만 image_meta 로 포함.
     payload = req.model_dump()
+    payload.pop("result_image_path", None)
     payload["__image_meta"] = None
     if validated_path:
         try:
             st = Path(validated_path).stat()
-            payload["__image_meta"] = [validated_path, st.st_mtime_ns, st.st_size]
+            payload["__image_meta"] = [
+                str(Path(validated_path).resolve()).replace("\\", "/"),
+                st.st_mtime_ns,
+                st.st_size,
+            ]
         except OSError:
             pass
     blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
