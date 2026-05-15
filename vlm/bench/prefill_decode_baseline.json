@@ -1,0 +1,26 @@
+[
+  {
+    "sample": "normal_case",
+    "in_tokens": 1249,
+    "out_tokens": 136,
+    "first_token_sec": 0.319,
+    "total_sec": 19.325,
+    "decode_per_token_ms": 140.8
+  },
+  {
+    "sample": "backfat_error_case",
+    "in_tokens": 1331,
+    "out_tokens": 224,
+    "first_token_sec": 0.339,
+    "total_sec": 32.012,
+    "decode_per_token_ms": 142.0
+  },
+  {
+    "sample": "sample_3473",
+    "in_tokens": 1253,
+    "out_tokens": 136,
+    "first_token_sec": 0.309,
+    "total_sec": 19.58,
+    "decode_per_token_ms": 142.8
+  }
+]

@@ -1,0 +1,77 @@
+[
+  {
+    "batch_size": 1,
+    "avg_total_sec": 18.08,
+    "avg_per_request_sec": 18.08,
+    "trials": [
+      {
+        "total_sec": 18.04696011543274,
+        "per_request_sec": 18.04696011543274,
+        "in_len": 1345,
+        "out_tokens": 128
+      },
+      {
+        "total_sec": 18.109949111938477,
+        "per_request_sec": 18.109949111938477,
+        "in_len": 1345,
+        "out_tokens": 128
+      },
+      {
+        "total_sec": 18.077816486358643,
+        "per_request_sec": 18.077816486358643,
+        "in_len": 1345,
+        "out_tokens": 128
+      }
+    ]
+  },
+  {
+    "batch_size": 2,
+    "avg_total_sec": 18.52,
+    "avg_per_request_sec": 9.26,
+    "trials": [
+      {
+        "total_sec": 18.55660080909729,
+        "per_request_sec": 9.278300404548645,
+        "in_len": 1345,
+        "out_tokens": 256
+      },
+      {
+        "total_sec": 18.502660751342773,
+        "per_request_sec": 9.251330375671387,
+        "in_len": 1345,
+        "out_tokens": 256
+      },
+      {
+        "total_sec": 18.487818956375122,
+        "per_request_sec": 9.243909478187561,
+        "in_len": 1345,
+        "out_tokens": 256
+      }
+    ]
+  },
+  {
+    "batch_size": 4,
+    "avg_total_sec": 18.83,
+    "avg_per_request_sec": 4.71,
+    "trials": [
+      {
+        "total_sec": 18.755465030670166,
+        "per_request_sec": 4.6888662576675415,
+        "in_len": 1345,
+        "out_tokens": 512
+      },
+      {
+        "total_sec": 18.76238512992859,
+        "per_request_sec": 4.690596282482147,
+        "in_len": 1345,
+        "out_tokens": 512
+      },
+      {
+        "total_sec": 18.964301347732544,
+        "per_request_sec": 4.741075336933136,
+        "in_len": 1345,
+        "out_tokens": 512
+      }
+    ]
+  }
+]
