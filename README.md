@@ -2,7 +2,7 @@
 
 > **thema_pa** (YOLOv11 돼지 도체 AI) 위에 **Qwen3-VL-8B LoRA 파인튜닝** 모델을 한국어 판정 레이어로 추가하는 3종 포트폴리오
 
-[![Release](https://img.shields.io/badge/release-v1.1.0-blueviolet.svg)](https://github.com/Yanghyuck/VLM/releases/tag/v1.1.0)
+[![Release](https://img.shields.io/badge/release-v1.2.0-blueviolet.svg)](https://github.com/Yanghyuck/VLM/releases/tag/v1.2.0)
 [![CI](https://github.com/Yanghyuck/VLM/actions/workflows/ci.yml/badge.svg)](https://github.com/Yanghyuck/VLM/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.7-ee4c2c.svg)](https://pytorch.org/)
@@ -34,6 +34,20 @@
 
 → Vision LoRA + AI 이미지 학습으로 **베이스 대비 ROUGE +26%, BERTScore +14%** 개선.
 **모든 50건에서 v2가 Base를 초과** (단 한 건도 빠짐없음).
+
+### 운영 채택: v4 어댑터 (검출 실패 환각 근본 해결, 2026-05-15) ⭐
+
+held-out 정상 케이스 점수는 v2/v3와 동등하지만, **검출 실패 케이스의 환각**(예: 입력 `암컷` → 응답 "거세 암컷")을 학습 데이터 보강(검출 실패 합성 500건 + abnormal task 활성)으로 직접 해결.
+
+| 항목 | v2-corrected | v3 (rank 128) | **v4 (운영)** |
+|---|---|---|---|
+| 학습 시간 | 5h 02m | 34h 15m | 6h 19m |
+| train_loss / eval_loss | 0.166 / 0.079 | 0.147 / 0.072 | **0.160 / 0.077** |
+| 검출 실패 환각 | 일부 잔존 | 일부 잔존 | **사라짐** ⭐ |
+| thema_pa_VLM E2E | 4/4 PASS | — | **4/4 PASS** (avg 25.7s) |
+
+운영 어댑터 경로: `vlm/train/output/qwen3vl-lora-v4/` (`config.json` `paths.lora_adapter`)
+
 상세 결과: [`vlm/bench/score_report.md`](./vlm/bench/score_report.md), [`failure_analysis.md`](./vlm/bench/failure_analysis.md), [`quantization_report.md`](./vlm/train/quantization_report.md)
 
 ### 30초 어필 (포트폴리오 요약)

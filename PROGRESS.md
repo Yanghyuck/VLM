@@ -1,9 +1,10 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-05-08 (v1.1.0 태그 + 푸시 완료)
+**최종 업데이트**: 2026-05-15 (v4 어댑터 운영 채택 + thema_pa_VLM E2E 4/4 PASS)
 **현재 브랜치**: `main` (default), `local-vlm-train` (개발 — 모든 신규 커밋·푸시 대상)
 **리포지토리**: https://github.com/Yanghyuck/VLM
-**릴리스**: [`v1.1.0`](https://github.com/Yanghyuck/VLM/tree/v1.1.0) (태그만, GitHub Release 페이지는 보류)
+**릴리스**: [`v1.2.0`](https://github.com/Yanghyuck/VLM/tree/v1.2.0) (v4 어댑터 — 검출 실패 환각 근본 해결)
+**운영 권장 어댑터**: `vlm/train/output/qwen3vl-lora-v4` (config.json `paths.lora_adapter`)
 
 ---
 
@@ -673,6 +674,15 @@ curl -X POST http://localhost:8000/v1/report \
     - backfat_error: "거세 암컷" 환각 사라짐, 검출 실패 항목 정확 명시
     - entry_error: "거세 판정 오류" 환각 사라짐, 비정상 진입 명확
   - **운영 권장: v2-corrected → v4 변경**. 학습 비용 1/5.7 (v3 대비), 환각 직접 해결.
+
+- [x] **v4 운영 채택 + thema_pa_VLM E2E 재검증** (2026-05-15)
+  - `config.json` `paths.lora_adapter`: `qwen3vl-lora` → **`qwen3vl-lora-v4`**
+  - `config.example.json` 동일 갱신 (템플릿)
+  - VLM FastAPI 가동 → `/v1/health` `model_used=lora`, `adapter_exists=true` 확인
+  - `scripts/test_e2e_thema_pa_bridge.py` **4/4 PASS** (평균 25.7s/req)
+    - normal_case 20.1s / backfat_error 34.6s / entry_error 28.0s / sample_3473 20.0s
+  - 저장 검증: `thema_pa_VLM/storage/vlm_reports/{ymd}_{pigno}_vlm_report.json` 4건 모두 생성
+  - 환각 해결 운영 흐름에서도 재현: backfat_error_case 응답이 "암컷" + "검출 실패" 정확 명시
 
 - [x] **C1 v3 재학습 완료** (2026-05-09 15:17 → 2026-05-11 01:32, **34h 15m**)
   - YAML: `vlm/train/qwen3vl_lora_v3.yaml` (rank 64→128, alpha 128→256, capacity 2배)

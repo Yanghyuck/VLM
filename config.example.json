@@ -13,7 +13,7 @@
     "dataset_jsonl": "vlm/data/dataset.jsonl",
     "train_json": "vlm/data/livestock_train.json",
     "llamafactory_data_dir": "C:/path/to/LLaMA-Factory/data",
-    "lora_adapter": "vlm/train/output/qwen3vl-lora",
+    "lora_adapter": "vlm/train/output/qwen3vl-lora-v4",
     "samples_dir": "vlm/schema/samples"
   },
   "model": {
