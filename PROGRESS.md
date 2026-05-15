@@ -714,6 +714,49 @@ curl -X POST http://localhost:8000/v1/report \
   - 스모크: 텍스트만 3.4s/33t, 이미지+텍스트 4.8s/48t
   - 주의: VLM FastAPI 서버 가동 중이면 GPU OOM (먼저 종료 필요)
 
+- [x] **`/v1/report/stream` NDJSON streaming + KV cache 측정** (2026-05-15)
+  - **streaming 엔드포인트**: `vlm/api/server.py` `POST /v1/report/stream`
+    - `vlm/train/inference.py` `stream_response()` generator (TextIteratorStreamer + daemon Thread)
+    - NDJSON: `start` → `token`*N → `done`(후처리 포함)
+    - 검증: START 0.03s / FIRST TOKEN 2.11s / DONE 23.15s (41 chunks)
+    - 사용자 체감: 23s 일괄 대기 → **2s 후 점진 출력** ⭐
+  - **KV cache 보류 (ROI 없음)**: `scripts/bench_prefill_decode.py` 측정 결과 prefill 1.4% / decode 98.6% (141ms/token)
+    - system_prompt KV 캐시 절감 한도 ~0.2s 로 미미
+    - 향후 가속은 decode 단계 (speculative decoding / vLLM / torch.compile) 에서 찾는 것이 합리적
+    - baseline 보존: `vlm/bench/prefill_decode_baseline.json`
+
+- [x] **운영 `image_max_pixels` 200K → 100K (학습 분포 일치)** (2026-05-15)
+  - `config.json` / `config.example.json` `model.image_max_pixels`: **200,704 → 100,352**
+  - 배경: v4 학습 YAML(`qwen3vl_lora_v4.yaml`) 이 **100,352** 로 학습 — 운영 200K 가 학습보다 2배 컸음 (분포 mismatch)
+  - 검증 (Phase B 9건 재호출): 평균 19.1s vs 200K 18.9s (노이즈 안), **응답은 토씨 하나 안 다르게 동일** (회귀 0)
+  - 가치: latency 보다는 **학습-추론 분포 일치**, 이미지 처리/VRAM 부담 절감
+
+- [x] **decode 가속 후보 평가 — torch.compile 미채택** (2026-05-15)
+  - `scripts/bench_compile.py` — baseline vs compiled (3 trials, max_new=128)
+  - baseline 144.2 ms/token vs compiled 147.7 ms/token → **0.98x (-2.4%, 노이즈)**
+  - PEFT(`PeftModelForCausalLM`) wrap + dynamic=True 로 효과 미미. RTX 4090 의 bf16+sdpa 가 이미 천장 근접
+  - flash-attn 은 Windows 설치 부담 + sdpa 가 자동 적용 → 미시도
+
+- [x] **micro-batching 가치 측정 + vLLM 평가 보류** (2026-05-15)
+  - `scripts/bench_batch.py` — batch_size 1/2/4 비교 (max_new=128, 3 trials)
+  - batch=1: 18.08s/req → batch=2: **9.26s/req (1.95x, 98%)** → batch=4: **4.71s/req (3.84x, 96%)**
+  - 거의 선형 가속 — 단일 요청 메모리 대역폭 bound, batch 로 weight/KV 로드 amortize
+  - vLLM 평가: Windows MAX_PATH 한계로 source build 실패 → **운영 도입은 Linux 환경(WSL2/Docker) 확보 후**
+  - 결과 보존: `vlm/bench/batch_speedup.json`
+
+- [x] **응답 캐시 (in-memory LRU) + Prometheus `/metrics`** (2026-05-15)
+  - **응답 캐시**: SHA1(payload + image mtime/size) 키 + `OrderedDict` LRU + `asyncio.Lock`
+    - 기본 max=256 (`config.api.response_cache_max`), `/v1/report/stream` 은 제외
+    - hit 응답: `model_used` 끝에 `(cached)` 표기
+    - 검증: 19.4s → **14.5ms (1340x)**, gender 변경 시 정확히 miss
+    - `/v1/health` 에 `cache: {size, max, hits, misses, hit_ratio}` 노출
+  - **Prometheus**: 전용 `CollectorRegistry` (모듈 중복 import 회피)
+    - `vlm_requests_total{endpoint,status}` / `vlm_request_duration_seconds{endpoint}`
+    - `vlm_inference_duration_seconds` (캐시 hit 제외)
+    - `vlm_cache_total{result}` / `vlm_model_ready` / `vlm_cache_size`
+    - `requirements.txt`: `prometheus_client>=0.20`
+  - **부수 수정**: uvicorn `reload` 기본 False (watchfiles 가 server_run.log 변화로 무한 reload + Counter 중복 등록 방지). 환경변수 `VLM_API_RELOAD=1` 로 dev 시 활성
+
 - [x] **C1 v3 재학습 완료** (2026-05-09 15:17 → 2026-05-11 01:32, **34h 15m**)
   - YAML: `vlm/train/qwen3vl_lora_v3.yaml` (rank 64→128, alpha 128→256, capacity 2배)
   - 출력: `vlm/train/output/qwen3vl-lora-v3/adapter_model.safetensors`

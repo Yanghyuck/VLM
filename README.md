@@ -118,6 +118,12 @@ python vlm/api/server.py             # FastAPI 서버   : http://localhost:8000/
 python scripts/chat_vlm.py           # 자유 chat CLI  (베이스 Qwen3-VL, 이미지 첨부 지원)
 ```
 
+> API 엔드포인트
+> - `POST /v1/report` — 일괄 응답 (in-memory LRU 캐시 적용, hit 시 ~15ms)
+> - `POST /v1/report/stream` — NDJSON streaming (FIRST TOKEN ~2s, 이후 점진 출력)
+> - `GET  /v1/health` — 모델/캐시 상태
+> - `GET  /metrics` — Prometheus exposition (requests, latency, cache, inference time)
+
 ---
 
 ## 🏗️ 세 프로젝트 구성

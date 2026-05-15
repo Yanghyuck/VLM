@@ -7,6 +7,69 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+### Added — `/v1/report/stream` NDJSON streaming 엔드포인트
+- `vlm/api/server.py` — `POST /v1/report/stream` (NDJSON, 줄당 1 JSON)
+  - 형식: `{"event":"start"}` → `{"event":"token","text":...}` * N → `{"event":"done","result":{...},"elapsed_sec":...}`
+  - 에러 시: `{"event":"error","detail":...}`
+- `vlm/train/inference.py` — `stream_response(output)` generator (TextIteratorStreamer + daemon Thread)
+- 검증 (carcass_no=11, AI 이미지):
+  - START 0.03s / **FIRST TOKEN 2.11s** / DONE 23.15s (41 chunks)
+  - 사용자 체감 latency: 23s 일괄 대기 → 2s 후 점진 출력
+  - 후처리 (A3/A4/A5) 는 누적 텍스트로 done 직전 1회 적용 (응답 일관성 보존)
+
+### Investigated — micro-batching 가치 입증 + vLLM 평가 보류
+- `scripts/bench_batch.py` — batch_size 1/2/4 의 per-request latency 비교
+- 결과 (max_new=128, 3 trials, RTX 4090, v4 LoRA, image_max_pixels=100K):
+  - batch=1: 18.08s/req
+  - batch=2: 9.26s/req → **1.95x (98% 효율)**
+  - batch=4: 4.71s/req → **3.84x (96% 효율)**
+  - 거의 선형 가속. 단일 요청은 메모리 대역폭 bound 라 batch 로 weight/KV 로드 amortize → GPU compute 거의 그대로 활용
+- vLLM 평가 시도 → Windows MAX_PATH(260자) 한계로 source build 실패 (`fused_moe configs/E=256,N=384,...` 파일명)
+- 결정: **평가 보류, batch 측정 결과로 micro-batching 가치 입증**. 운영 도입은 Linux 환경(WSL2/Docker) 확보 후
+- 측정 결과 보존: `vlm/bench/batch_speedup.json`
+
+### Added — Prometheus `/metrics` 엔드포인트
+- `vlm/api/server.py` — 전용 `CollectorRegistry` 사용 (직접 실행 시 모듈 중복 import 회피)
+- 노출 metrics:
+  - `vlm_requests_total{endpoint,status}` — 요청 카운트
+  - `vlm_request_duration_seconds{endpoint}` — 요청 처리 시간 히스토그램
+  - `vlm_inference_duration_seconds` — 추론 본체 시간 (캐시 hit 제외)
+  - `vlm_cache_total{result="hit|miss"}` — 캐시 hit/miss
+  - `vlm_model_ready` — 모델 로드 완료 (1/0)
+  - `vlm_cache_size` — 현재 캐시 항목 수
+- `requirements.txt`: `prometheus_client>=0.20`
+- 검증: 3 호출 후 `/metrics` 정확 노출 (requests_total=3, cache hit=1/miss=2, inference_sum 38.25s)
+
+### Added — 응답 캐시 (in-memory LRU)
+- `vlm/api/server.py` — SHA1(payload + image_meta) 키 + `OrderedDict` LRU + `asyncio.Lock`
+  - 키에 image 의 mtime/size 포함 → 같은 경로라도 이미지 변경 시 재추론
+  - 기본 max=256 (`config.api.response_cache_max` 로 재정의)
+  - `/v1/report/stream` 은 캐시 제외 (token 스트림 의미 X)
+  - hit 응답의 `model_used` 끝에 `(cached)` 표기
+- `/v1/health` 에 `cache: {size, max, hits, misses, hit_ratio}` 노출
+- 검증: 동일 payload 두 번 호출 시 19.4s → **14.5ms (1340x)**, gender 변경 시 정확히 miss
+
+### Fixed — uvicorn `reload=True` 가 server_run.log 변화로 무한 reload + Prometheus Counter 중복 등록
+- `vlm/api/server.py` `__main__`: `reload` 기본 False 로 변경
+- 환경변수 `VLM_API_RELOAD=1` 일 때만 reload (dev 전용)
+- 기존: `vlm/api/` 안에 server_run.log 가 쌓이면서 watchfiles 가 무한 reload → metrics Counter 가 매번 재등록되어 ValueError
+
+### Changed — 운영 image_max_pixels 200,704 → 100,352 (학습 분포 일치)
+- `config.json` / `config.example.json` `model.image_max_pixels`: 200,704 → 100,352
+- 배경: v4 학습 YAML(`qwen3vl_lora_v4.yaml`)이 100,352 인데 운영이 200,704 → 추론 시 이미지가 학습보다 2배 컸음
+- 검증 (Phase B 9건 재호출):
+  - latency: 평균 19.1s vs 200K baseline 18.9s — 차이 노이즈 안 (prefill 1.4% 비중이라 vision encoder 절감이 곧 ~0.2s 미만)
+  - 응답: pigno 3/11 등 spot-check, **200K 응답과 토씨 하나 안 다르게 동일** (회귀 0)
+- 가치: latency 보다는 **학습 분포 일치**, VRAM/이미지 처리 부담 절감
+
+### Investigated — system_prompt KV cache (보류)
+- baseline 측정 (`scripts/bench_prefill_decode.py`, 3 샘플 평균):
+  - first-token 0.32s / total 23.6s → **prefill 비중 1.4%**
+  - decode-only 141 ms/token (병목)
+- KV cache 절감 한도: ~0.2s (1% 미만) → ROI 없음, 미구현
+- 결과 보존: `vlm/bench/prefill_decode_baseline.json`
+- 향후 가속은 decode 단계(speculative decoding / vLLM continuous batching / torch.compile)에서 찾는 것이 합리적
+
 ### Added — 자유 chat CLI (옵션 A)
 - `scripts/chat_vlm.py` — 멀티턴 + 이미지 첨부 (`/image PATH`) + LoRA 토글
   - `--use-adapter` 로 v4 LoRA 적용, 기본은 베이스 Qwen3-VL-8B (일반 chat 권장)
