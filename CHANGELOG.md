@@ -7,6 +7,23 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+### 향후 계획
+- v1.2.0 GitHub Release 페이지는 `v1.2.0` 태그 푸시 후 웹 UI 에서 작성 (gh CLI 미설치)
+- thema_pa_VLM 운영 파이프라인(`main.py`/`pcw_main.py`)에서 `SendVLMReport` 자동 트리거 검증
+
+---
+
+## [v1.2.0] — 2026-05-15 (v4 어댑터 운영 채택 + 검출 실패 환각 근본 해결)
+
+### Operations — v4 운영 채택 + thema_pa_VLM E2E 재검증 (2026-05-15)
+- `config.json` `paths.lora_adapter`: `qwen3vl-lora` (v2-corrected) → **`qwen3vl-lora-v4`**
+- `config.example.json` 동일 갱신 (운영 권장 템플릿)
+- VLM FastAPI `/v1/health`: `model_used=lora`, `adapter_exists=true` 확인
+- `scripts/test_e2e_thema_pa_bridge.py` **4/4 PASS** (평균 25.7s/req)
+  - normal_case 20.1s / backfat_error 34.6s / entry_error 28.0s / sample_3473 20.0s
+- 저장 검증: `thema_pa_VLM/storage/vlm_reports/{ymd}_{pigno}_vlm_report.json` 4건 생성
+- 환각 해결 운영 흐름에서도 재현: backfat_error_case 응답이 입력 `암컷` + `검출 실패` 정확 명시
+
 ### Added — 응답 품질 후처리 (A3/A4)
 - `vlm/postprocess.py` — LoRA 응답 dict 한국어 후처리 (순수 파이썬, 학습 무관 즉시 적용)
   - **A3 한국어 조사 정규화**: "거세으로" → "거세로", "1+으로" → "1+로", "등외으로" → "등외로", "2으로" → "2로"
@@ -128,15 +145,13 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 - 재생성 결과: 어색한 패턴 0건, 정상 패턴(`거세로`/`암컷으로`/`수컷으로`) 3,305건
 - `tests/test_convert_dataset.py` — 16 단위 테스트 (조사 회귀 가드 포함). 전체 77/77 PASS.
 
-### 향후 계획
-- 한국어 조사 정규화 — 후처리 외 학습 데이터 패턴 보강 (다음 학습 사이클)
-- 등급 정합성 — 학습 강화로 후처리 의존도 감소
-- `thema_pa_VLM/save_vlm_response_json` 절대경로화 (현재 cwd 의존)
+### Roadmap (v1.2.0 시점)
 - 데이터 추가 수집 (다른 도축장, 다른 일자, 등외 케이스 포함)
 - GPTQ / AWQ 양자화 재시도 (NF4 대비 품질 보존 기대)
 - HTTPS 리버스 프록시 구성 가이드
 - Prometheus `/metrics` 엔드포인트
 - 데모 영상/GIF
+- thema_pa_VLM `main.py` 파이프라인 자동 트리거 검증
 
 ---
 
