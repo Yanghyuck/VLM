@@ -322,3 +322,86 @@ def generate_report(
             expected_gender=output.gender.label(),
         )
     return parsed
+
+
+def stream_response(
+    output: ThemaPAOutput,
+    *,
+    use_adapter: bool = True,
+    adapter_path: str | None = None,
+):
+    """generate_report 의 streaming 변형.
+
+    토큰 단위 텍스트 chunk 를 yield. 후처리는 서버 측에서 누적 텍스트로 수행.
+    별도 스레드에서 _model.generate(streamer=...) 를 돌리고 main 에서 streamer 순회.
+
+    yield: str (decoded text chunk)
+    """
+    _load_model(use_adapter=use_adapter, adapter_path=adapter_path)
+
+    system_text = _load_prompt("system_prompt.txt")
+    template    = _select_template(output)
+    user_text   = template.replace("{{SUMMARY}}", output.summary())
+
+    image_path = output.result_image_path
+    if image_path and Path(image_path).exists():
+        from PIL import Image
+        image = Image.open(image_path).convert("RGB")
+        max_pixels = getattr(CFG.model, "image_max_pixels", 200_704)
+        w, h = image.size
+        if w * h > max_pixels:
+            scale = (max_pixels / (w * h)) ** 0.5
+            image = image.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
+        messages = [
+            {"role": "system", "content": system_text},
+            {"role": "user",   "content": [
+                {"type": "image", "image": image},
+                {"type": "text",  "text": user_text},
+            ]},
+        ]
+    else:
+        messages = [
+            {"role": "system", "content": system_text},
+            {"role": "user",   "content": user_text},
+        ]
+
+    text_input = _processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True,
+    )
+    if image_path and Path(image_path).exists():
+        from qwen_vl_utils import process_vision_info
+        image_inputs, video_inputs = process_vision_info(messages)
+        inputs = _processor(
+            text=[text_input], images=image_inputs, videos=video_inputs,
+            padding=True, return_tensors="pt",
+        ).to(_model.device)
+    else:
+        inputs = _processor(
+            text=[text_input], padding=True, return_tensors="pt",
+        ).to(_model.device)
+
+    from threading import Thread
+    from transformers import TextIteratorStreamer
+
+    streamer = TextIteratorStreamer(
+        _processor.tokenizer, skip_prompt=True, skip_special_tokens=True,
+    )
+    pad_id = _processor.tokenizer.pad_token_id or _processor.tokenizer.eos_token_id
+
+    gen_kwargs = dict(
+        **inputs,
+        max_new_tokens=512,
+        do_sample=False,
+        num_beams=1,
+        repetition_penalty=1.05,
+        streamer=streamer,
+        pad_token_id=pad_id,
+    )
+
+    thread = Thread(target=_model.generate, kwargs=gen_kwargs, daemon=True)
+    thread.start()
+
+    for new_text in streamer:
+        if new_text:
+            yield new_text
+    thread.join()

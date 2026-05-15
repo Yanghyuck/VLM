@@ -9,6 +9,7 @@ anthropic>=0.25
 fastapi>=0.110
 uvicorn>=0.29
 slowapi>=0.1.9                 # rate limiting
+prometheus_client>=0.20        # /metrics 엔드포인트
 python-json-logger>=2.0        # JSON 구조적 로깅
 
 # Streamlit 데모

@@ -49,9 +49,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import sys
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -61,13 +63,23 @@ _ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+import json
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 from vlm.api.auth import is_auth_enabled, verify_api_key
 from vlm.api.schemas import ReportRequest, ReportResponse
@@ -137,7 +149,9 @@ async def lifespan(app: FastAPI):
         log.info("warm-up 추론 시작 (CUDA 커널 캐싱)")
         await loop.run_in_executor(None, _warmup_model_sync)
 
+    METRIC_MODEL_READY.set(1 if _model_ready else 0)
     yield
+    METRIC_MODEL_READY.set(0)
     log.info("API 종료")
 
 
@@ -164,13 +178,14 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
-# 요청 로깅 미들웨어
+# 요청 로깅 + metrics 미들웨어
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     request_id = uuid.uuid4().hex[:8]
     start = time.time()
     response = await call_next(request)
-    elapsed_ms = round((time.time() - start) * 1000, 1)
+    elapsed = time.time() - start
+    elapsed_ms = round(elapsed * 1000, 1)
     log.info(
         f"{request.method} {request.url.path}",
         extra={
@@ -182,6 +197,10 @@ async def log_requests(request: Request, call_next):
             "client":      get_remote_address(request),
         },
     )
+    # /metrics 자체는 측정에서 제외 (자기 호출 제외)
+    if request.url.path != "/metrics":
+        METRIC_REQUESTS.labels(endpoint=request.url.path, status=str(response.status_code)).inc()
+        METRIC_LATENCY.labels(endpoint=request.url.path).observe(elapsed)
     response.headers["X-Request-ID"] = request_id
     return response
 
@@ -197,6 +216,80 @@ app.add_middleware(
 _INFERENCE_TIMEOUT = getattr(CFG.api, "inference_timeout_sec", 180)
 
 _IMAGE_ROOT = Path(CFG.paths.image_dir).resolve()
+
+# ---- Prometheus metrics ----
+# 직접 실행(`python vlm/api/server.py`) 시 모듈이 __main__ + vlm.api.server 두 번 import 되어
+# default REGISTRY 에 중복 등록되는 문제 회피 — 전용 CollectorRegistry 사용.
+METRIC_REGISTRY = CollectorRegistry()
+METRIC_REQUESTS = Counter(
+    "vlm_requests_total",
+    "VLM API 요청 수",
+    labelnames=("endpoint", "status"),
+    registry=METRIC_REGISTRY,
+)
+METRIC_LATENCY = Histogram(
+    "vlm_request_duration_seconds",
+    "VLM API 요청 처리 시간 (초)",
+    labelnames=("endpoint",),
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 240),
+    registry=METRIC_REGISTRY,
+)
+METRIC_INFERENCE = Histogram(
+    "vlm_inference_duration_seconds",
+    "VLM 추론 본체 시간 (캐시 hit 제외)",
+    buckets=(1, 2, 5, 10, 15, 20, 25, 30, 45, 60, 90, 120, 180, 240),
+    registry=METRIC_REGISTRY,
+)
+METRIC_CACHE = Counter(
+    "vlm_cache_total",
+    "응답 캐시 hit/miss",
+    labelnames=("result",),
+    registry=METRIC_REGISTRY,
+)
+METRIC_MODEL_READY = Gauge("vlm_model_ready", "모델 로드 완료 (1/0)", registry=METRIC_REGISTRY)
+METRIC_CACHE_SIZE = Gauge("vlm_cache_size", "현재 캐시된 응답 수", registry=METRIC_REGISTRY)
+
+
+# ---- 응답 캐시 (in-memory LRU) ----
+# 같은 payload(+이미지 mtime/size) 재호출을 즉시 반환. 운영에선 도체별 unique 라
+# hit 가 적지만 디버깅/재시도/E2E 반복에 유용.
+_CACHE_MAX = int(getattr(CFG.api, "response_cache_max", 256))
+_response_cache: "OrderedDict[str, dict]" = OrderedDict()
+_cache_lock = asyncio.Lock()
+_cache_hits = 0
+_cache_misses = 0
+
+
+def _cache_key(req: "ReportRequest", validated_path: Optional[str]) -> str:
+    payload = req.model_dump()
+    payload["__image_meta"] = None
+    if validated_path:
+        try:
+            st = Path(validated_path).stat()
+            payload["__image_meta"] = [validated_path, st.st_mtime_ns, st.st_size]
+        except OSError:
+            pass
+    blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha1(blob).hexdigest()
+
+
+async def _cache_get(key: str) -> Optional[dict]:
+    global _cache_hits, _cache_misses
+    async with _cache_lock:
+        if key in _response_cache:
+            _response_cache.move_to_end(key)
+            _cache_hits += 1
+            return _response_cache[key]
+        _cache_misses += 1
+        return None
+
+
+async def _cache_put(key: str, value: dict) -> None:
+    async with _cache_lock:
+        _response_cache[key] = value
+        _response_cache.move_to_end(key)
+        while len(_response_cache) > _CACHE_MAX:
+            _response_cache.popitem(last=False)
 
 
 def _validate_image_path(path: str | None) -> str | None:
@@ -239,12 +332,20 @@ def _build_thema_output(req: ReportRequest) -> ThemaPAOutput:
 
 @app.get("/v1/health")
 def health():
+    total = _cache_hits + _cache_misses
     return {
         "status": "ready" if _model_ready else "loading",
         "model_used": _model_used,
         "adapter_exists": ADAPTER_PATH.exists(),
         "auth_enabled": is_auth_enabled(),
         "rate_limit_per_minute": _RATE_LIMIT,
+        "cache": {
+            "size": len(_response_cache),
+            "max": _CACHE_MAX,
+            "hits": _cache_hits,
+            "misses": _cache_misses,
+            "hit_ratio": round(_cache_hits / total, 3) if total else 0.0,
+        },
     }
 
 
@@ -261,6 +362,18 @@ async def generate_report(request: Request, req: ReportRequest):
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"입력 데이터 오류: {e}")
 
+    cache_key = _cache_key(req, output.result_image_path)
+    cached = await _cache_get(cache_key)
+    if cached is not None:
+        METRIC_CACHE.labels(result="hit").inc()
+        log.info("report cache hit", extra={
+            "carcass_no": req.carcass_no, "cache_key": cache_key[:8],
+        })
+        cached_view = dict(cached)
+        cached_view["model_used"] = f"{cached_view.get('model_used', _model_used)} (cached)"
+        return ReportResponse(**cached_view)
+    METRIC_CACHE.labels(result="miss").inc()
+
     t0 = time.time()
     loop = asyncio.get_event_loop()
     try:
@@ -273,7 +386,9 @@ async def generate_report(request: Request, req: ReportRequest):
             status_code=504,
             detail=f"추론 타임아웃 ({_INFERENCE_TIMEOUT}초 초과)",
         )
-    elapsed = round(time.time() - t0, 2)
+    inference_time = time.time() - t0
+    METRIC_INFERENCE.observe(inference_time)
+    elapsed = round(inference_time, 2)
 
     log.info(
         "report generated",
@@ -285,15 +400,113 @@ async def generate_report(request: Request, req: ReportRequest):
         },
     )
 
-    return ReportResponse(
+    response = ReportResponse(
         summary=result.get("3문장_요약", ""),
         grade_reason=result.get("비정상_근거"),
         warnings=result.get("주의사항", []),
         recommendation=result.get("권고", ""),
         model_used=f"{_model_used} ({elapsed}s)",
     )
+    await _cache_put(cache_key, response.model_dump())
+    METRIC_CACHE_SIZE.set(len(_response_cache))
+    return response
+
+
+@app.get("/metrics")
+def metrics():
+    METRIC_MODEL_READY.set(1 if _model_ready else 0)
+    METRIC_CACHE_SIZE.set(len(_response_cache))
+    return PlainTextResponse(generate_latest(METRIC_REGISTRY), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.post("/v1/report/stream", dependencies=[Depends(verify_api_key)])
+@limiter.limit(f"{_RATE_LIMIT}/minute")
+async def stream_report(request: Request, req: ReportRequest):
+    """NDJSON streaming. 각 줄이 독립 JSON.
+
+    형식:
+      {"event":"start","carcass_no":...}\\n
+      {"event":"token","text":"..."}\\n   (반복)
+      {"event":"done","result":{...},"elapsed_sec":...}\\n
+    """
+    if not _model_ready:
+        raise HTTPException(status_code=503, detail="모델 로딩 중입니다. /v1/health 로 상태 확인 후 재시도하세요.")
+
+    try:
+        output = _build_thema_output(req)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"입력 데이터 오류: {e}")
+
+    async def event_stream():
+        loop = asyncio.get_event_loop()
+        t0 = time.time()
+        accumulated: list[str] = []
+
+        yield json.dumps({"event": "start", "carcass_no": req.carcass_no}, ensure_ascii=False) + "\n"
+
+        sync_gen = _inference_module.stream_response(output)
+
+        def _next_chunk():
+            try:
+                return next(sync_gen)
+            except StopIteration:
+                return None
+
+        try:
+            while True:
+                chunk = await asyncio.wait_for(
+                    loop.run_in_executor(None, _next_chunk),
+                    timeout=_INFERENCE_TIMEOUT,
+                )
+                if chunk is None:
+                    break
+                accumulated.append(chunk)
+                yield json.dumps({"event": "token", "text": chunk}, ensure_ascii=False) + "\n"
+        except asyncio.TimeoutError:
+            yield json.dumps({"event": "error", "detail": f"추론 타임아웃 ({_INFERENCE_TIMEOUT}초)"}, ensure_ascii=False) + "\n"
+            return
+
+        elapsed = round(time.time() - t0, 2)
+        full_text = "".join(accumulated)
+
+        # 후처리
+        from vlm.train.inference import _extract_json
+        from vlm.postprocess import apply_postprocess
+        try:
+            parsed = _extract_json(full_text)
+            parsed = apply_postprocess(
+                parsed,
+                expected_grade=req.grade,
+                expected_gender=output.gender.label(),
+            )
+        except Exception as e:
+            yield json.dumps({"event": "error", "detail": f"후처리 실패: {e}", "raw": full_text}, ensure_ascii=False) + "\n"
+            return
+
+        result = {
+            "summary":        parsed.get("3문장_요약", ""),
+            "grade_reason":   parsed.get("비정상_근거"),
+            "warnings":       parsed.get("주의사항", []),
+            "recommendation": parsed.get("권고", ""),
+            "model_used":     f"{_model_used} ({elapsed}s)",
+        }
+        log.info("stream report generated", extra={
+            "carcass_no": req.carcass_no, "grade": req.grade,
+            "elapsed_sec": elapsed, "model": _model_used, "stream": True,
+        })
+        yield json.dumps({"event": "done", "result": result, "elapsed_sec": elapsed}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 
 if __name__ == "__main__":
+    import os
+
     import uvicorn
-    uvicorn.run("vlm.api.server:app", host=CFG.api.host, port=CFG.api.port, reload=True)
+
+    # 기본 reload=False (운영 안정 + watchfiles 가 server_run.log 변화로 무한 reload 트리거 + prometheus
+    # Counter 중복 등록 방지). dev 시 VLM_API_RELOAD=1 로 강제.
+    reload = os.environ.get("VLM_API_RELOAD", "0") == "1"
+    uvicorn.run("vlm.api.server:app", host=CFG.api.host, port=CFG.api.port, reload=reload)
