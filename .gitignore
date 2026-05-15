@@ -31,3 +31,10 @@ vlm/train/quantization_int8.log
 run_claude.bat
 storage/vlm_reports/*.json
 !storage/vlm_reports/.gitkeep
+
+# 학습/추론/벤치 실행 로그 (자동 생성)
+vlm/train/training_*.log
+vlm/train/smoke_*.log
+vlm/train/*_run.log
+vlm/api/*_run.log
+vlm/bench/*_run.log
