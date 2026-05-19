@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-05-15 (v4 어댑터 운영 채택 + thema_pa_VLM E2E 4/4 PASS)
+**최종 업데이트**: 2026-05-19 (v1.2.0 GitHub Release 게시)
 **현재 브랜치**: `main` (default), `local-vlm-train` (개발 — 모든 신규 커밋·푸시 대상)
 **리포지토리**: https://github.com/Yanghyuck/VLM
 **릴리스**: [`v1.2.0`](https://github.com/Yanghyuck/VLM/tree/v1.2.0) (v4 어댑터 — 검출 실패 환각 근본 해결)
@@ -652,7 +652,7 @@ curl -X POST http://localhost:8000/v1/report \
 - [x] **C1**: `CHANGELOG.md` `[v1.1.0]` 섹션 추가 (5주차 + E2E + warm-up + numpy 핀)
 - [x] **D1**: `git push origin local-vlm-train` (메모리 규칙: main 직접 푸시 금지)
 - [x] **D2-tag**: `v1.1.0` 태그 생성 + 푸시 완료
-- [ ] **D2-release**: GitHub Release 페이지 — 보류 (gh CLI 미설치, 필요 시 웹 UI 또는 winget 설치 후 진행)
+- [x] **D2-release**: GitHub Release 페이지 게시 완료 (2026-05-19) — https://github.com/Yanghyuck/VLM/releases/tag/v1.2.0 (Windows Credential Manager 토큰으로 GitHub API 직접 호출)
 
 ### 우선순위 2 — 응답 품질 ✅ (이번 세션 완료, 학습 대기)
 - [x] **A3 후처리**: `vlm/postprocess.py` (`거세으로→거세로`, `1+으로→1+로`, `등외으로→등외로`, `2으로→2로`)

@@ -7,6 +7,11 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+### Published — v1.2.0 GitHub Release 페이지 (2026-05-19)
+- https://github.com/Yanghyuck/VLM/releases/tag/v1.2.0
+- gh CLI 미설치 환경에서 Windows Credential Manager 의 GitHub OAuth token 을 추출 → GitHub Releases API 로 직접 POST
+- `name`, `tag_name=v1.2.0`, draft/prerelease=false, 본문 ~2,809자 (CHANGELOG `[v1.2.0]` 기반 발표성 마크다운)
+
 ### Added — `/v1/report/stream` NDJSON streaming 엔드포인트
 - `vlm/api/server.py` — `POST /v1/report/stream` (NDJSON, 줄당 1 JSON)
   - 형식: `{"event":"start"}` → `{"event":"token","text":...}` * N → `{"event":"done","result":{...},"elapsed_sec":...}`
@@ -100,9 +105,11 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 - thema_pa_VLM 측 커밋·푸시는 사용자 검토 후 (메모리 규칙 B2 정책)
 
 ### 향후 계획
-- v1.2.0 GitHub Release 페이지는 웹 UI 에서 작성 (gh CLI 미설치)
 - chat CLI 의 B/C 확장 — FastAPI `/v1/chat` 엔드포인트, Streamlit chat UI
 - thema_pa_VLM 측 변경(_resolve_vlm_grade 수정 + 비동기화) 사용자 검토·커밋
+- micro-batching 서버 통합 (batch 3.84x 입증, 동시 요청 빈도 측정 후)
+- vLLM 평가 — Linux 환경 (WSL2/Docker) 확보 후 재시도
+- API 인증 활성화 (`config.api.api_keys` 비어있음 → 운영 보안)
 
 ---
 
