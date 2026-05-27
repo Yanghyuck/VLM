@@ -1,0 +1,77 @@
+# =============================================================================
+# vlm/bench/registry.yaml
+# -----------------------------------------------------------------------------
+# Eval harness 모델/평가셋/회귀 임계치 선언적 등록.
+# harness.py 가 이 파일을 읽어 일괄 추론·스코어·회귀 검사 수행.
+#
+# 모델 추가 절차:
+#   1) 새 어댑터 학습 완료 (예: vlm/train/output/qwen3vl-lora-v5/)
+#   2) 본 파일 `models:` 에 한 항목 추가
+#   3) `python -m vlm.bench.harness run --models lora_v5`
+#   4) `python -m vlm.bench.harness score`  (전체 N-way 리포트 갱신)
+# =============================================================================
+
+eval_set:
+  source: jsonl          # jsonl | db
+  n: 50
+  seed: 42
+  path: vlm/bench/eval_set.jsonl    # 캐시 위치 (없으면 dataset.py 가 생성)
+
+baseline: lora_v2_corrected          # 회귀% 계산 기준 라벨 (채택된 운영 모델)
+
+# 회귀 임계치 — `harness check` 에서 baseline 대비 위반 시 exit 1
+# delta_pct: (new - baseline) / baseline * 100  (음수면 하락)
+regression:
+  rouge_l:         {min_delta_pct: -5.0}   # 5% 이상 하락 시 fail
+  rouge_l_max:     {min_delta_pct: -5.0}
+  bert_score_f1:   {min_delta_pct: -3.0}
+  distinct_2:      {min_delta_pct: -10.0}
+  grade_match_rate:{min_delta_pct: -2.0}
+  elapsed_avg_sec: {max_delta_pct: 30.0}   # 30% 이상 느려지면 fail
+
+# -----------------------------------------------------------------------------
+# 모델 등록
+# -----------------------------------------------------------------------------
+# 필드:
+#   label            (str)  벤치 표/리포트에 표시될 이름. 고유.
+#   mode             (str)  base | lora
+#   adapter_path     (str?) LoRA 어댑터 디렉터리. mode=base 면 null.
+#   legacy_results   (str?) 이전 스크립트로 생성한 결과 JSONL — 재추론 없이 스코어만 가능.
+#   note             (str?) 사람용 메모
+# -----------------------------------------------------------------------------
+models:
+  - label: base
+    mode: base
+    adapter_path: null
+    legacy_results: vlm/bench/results_base.jsonl
+    note: "Qwen3-VL-8B-Instruct 베이스, LoRA 미적용"
+
+  - label: lora_v1
+    mode: lora
+    adapter_path: vlm/train/output/qwen3vl-lora-v1-textonly
+    legacy_results: vlm/bench/results_lora_v1.jsonl
+    note: "v1 text-only LoRA (vision tower frozen)"
+
+  - label: lora_v2_prejosa
+    mode: lora
+    adapter_path: vlm/train/output/qwen3vl-lora-v2-prejosa
+    legacy_results: vlm/bench/results_lora_v2_prejosa.jsonl
+    note: "v2 — 어색조사 학습 (조사 일관성 X, 백업 보존본)"
+
+  - label: lora_v2_corrected
+    mode: lora
+    adapter_path: vlm/train/output/qwen3vl-lora
+    legacy_results: vlm/bench/results_lora_v2_corrected.jsonl
+    note: "v2-corrected — _eul_ro 헬퍼 + 성별 라벨 통일 (현 운영 채택본)"
+
+  - label: lora_v3
+    mode: lora
+    adapter_path: vlm/train/output/qwen3vl-lora-v3
+    legacy_results: vlm/bench/results_lora_v3.jsonl
+    note: "v3 — rank 128/alpha 256 (capacity 2배). 과적합 비채택."
+
+  - label: lora_v4
+    mode: lora
+    adapter_path: vlm/train/output/qwen3vl-lora-v4
+    legacy_results: vlm/bench/results_lora_v4.jsonl
+    note: "v4 — 합성 검출실패 500건 보강, rank 64 유지"

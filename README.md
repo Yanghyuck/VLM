@@ -258,7 +258,9 @@ VLM/
 │   ├── bench/
 │   │   ├── dataset.py         # 평가셋 빌드 (jsonl / db)
 │   │   ├── runner.py          # base / lora 추론 실행
-│   │   └── scorer.py          # ROUGE-L / BERTScore / 일치율
+│   │   ├── scorer.py          # ROUGE-L / BERTScore / 일치율
+│   │   ├── registry.yaml      # 모델/평가셋/회귀 임계치 선언 (eval harness)
+│   │   └── harness.py         # 단일 진입점 — run / score / check (회귀 검사)
 │   ├── demo/                  # Streamlit 데모
 │   └── report/                # inference.py 위임 shim
 │
@@ -436,6 +438,26 @@ make convert        # 학습 데이터 변환 (eval 제외)
 make train-v2       # v2 학습 실행 (Vision LoRA + AI)
 make bench-all      # 베이스 + LoRA + 점수
 ```
+
+### Eval harness (선언적 N-way 벤치 + 회귀 검사)
+
+`vlm/bench/registry.yaml` 에 모델 추가 후 한 줄로 실행:
+
+```bash
+# 등록된 모든 모델 일괄 추론 (legacy_results 있으면 skip, --force 로 재추론)
+python -m vlm.bench.harness run
+
+# 특정 모델만 (예: 새로 학습한 v5)
+python -m vlm.bench.harness run --models lora_v5
+
+# N-way 리포트 + 회귀 검사 (위반 시 exit 1)
+python -m vlm.bench.harness score --check
+
+# baseline(lora_v2_corrected) 대비 후보 회귀만 검사
+python -m vlm.bench.harness check --candidate lora_v5
+```
+
+산출물: `vlm/bench/runs/<ts>__<sha>__<label>/{results.jsonl, manifest.json}`, `vlm/bench/score_report.md`, `vlm/bench/regression.json`
 
 ## 🐳 Docker 실행
 

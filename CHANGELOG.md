@@ -7,6 +7,16 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+### Added — Eval harness (2026-05-27)
+- `vlm/bench/registry.yaml` — 모델/평가셋/회귀 임계치 선언적 등록 (6 모델: base + lora_v1/v2_prejosa/v2_corrected/v3/v4)
+- `vlm/bench/harness.py` — 단일 진입점 `run`/`score`/`check` 서브커맨드
+  - `run` — 등록 모델 일괄 추론 (legacy_results 있으면 skip, `--force` 로 재추론). `runs/<UTC>__<sha>__<label>/` 격리 디렉터리에 `results.jsonl` + `manifest.json`(git_sha, adapter SHA256, eval_set SHA256, env) 저장
+  - `score [--check]` — N-way 리포트(`score_report.md`) 갱신 + 회귀 검사 통합 (위반 시 exit 1)
+  - `check --candidate <label>` — baseline 대비 회귀 검사 단독 실행 + `regression.json` 상세 저장
+- 회귀 임계치: `rouge_l/rouge_l_max −5%`, `bert_score_f1 −3%`, `distinct_2 −10%`, `grade_match_rate −2%`, `elapsed_avg_sec +30%`
+- 검증: 기존 6 results 로 `score --check` 실행 → v3/v4 의 distinct_2 −26.9%(학습 reference 암기) 회귀 자동 감지 + exit 1
+- baseline = `lora_v2_corrected` (현 운영 어댑터). v5 학습 시 한 줄로 회귀 여부 판단 가능
+
 ### Published — v1.2.0 GitHub Release 페이지 (2026-05-19)
 - https://github.com/Yanghyuck/VLM/releases/tag/v1.2.0
 - gh CLI 미설치 환경에서 Windows Credential Manager 의 GitHub OAuth token 을 추출 → GitHub Releases API 로 직접 POST

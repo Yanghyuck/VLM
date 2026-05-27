@@ -644,9 +644,29 @@ curl -X POST http://localhost:8000/v1/report \
 - [ ] Sentry/PagerDuty 알림 (선택)
 - [x] **CHANGELOG.md** — 버전별 변경 이력 + 결정 이력
 
-## 다음 세션 시작점 (2026-05-08 기준, v1.1.0 이후)
+## 다음 세션 시작점 (2026-05-27 기준, v1.2.0 이후 — eval harness 도입)
 
-작업 트리 clean. `local-vlm-train` 푸시 완료(`a599c1c`). `v1.1.0` 태그 푸시 완료. 다음 세션 진입 시 이 섹션부터 확인.
+작업 트리 clean. `local-vlm-train` 푸시 완료. `v1.2.0` 태그 + GitHub Release 게시 완료(2026-05-19). 다음 세션 진입 시 이 섹션부터 확인.
+
+### 이번 세션 추가 — Eval harness 도입 (2026-05-27)
+- [x] **`vlm/bench/registry.yaml`** — 모델/평가셋/회귀 임계치 선언적 등록
+  - 등록 모델 6종: `base`, `lora_v1`, `lora_v2_prejosa`, `lora_v2_corrected`(baseline), `lora_v3`, `lora_v4`
+  - 회귀 임계치: `rouge_l/rouge_l_max -5%`, `bert_score_f1 -3%`, `distinct_2 -10%`, `grade_match_rate -2%`, `elapsed_avg_sec +30%`
+- [x] **`vlm/bench/harness.py`** — `run` / `score` / `check` 서브커맨드, 단일 진입점
+  - `run` — 등록 모델 일괄 추론 (legacy_results 있으면 skip, `--force` 로 재추론), `runs/<ts>__<sha>__<label>/` 디렉터리에 `results.jsonl` + `manifest.json` 생성
+  - `score [--check]` — N-way 리포트 갱신 + 회귀 검사 통합
+  - `check --candidate <label>` — baseline vs candidate 회귀 검사 단독 실행
+  - manifest: git_sha, adapter SHA256, eval_set SHA256, env(python/torch/transformers/peft/numpy)
+- [x] **검증**: `harness score --check` 실행 → 기존 6 results → 동일한 N-way 리포트 + 회귀 위반 자동 감지
+  - v3/v4 의 distinct_2 -26.9% (학습 reference 암기) 회귀 임계치로 자동 fail
+  - exit code 1 정상 반환
+- [x] **`vlm/bench/regression.json`** — 회귀 상세(per-metric delta_pct, rule, violated) 저장
+- 사용 예 (다음 v5 학습 후 한 줄 검증):
+  ```
+  python -m vlm.bench.harness run --models lora_v5
+  python -m vlm.bench.harness score --check
+  python -m vlm.bench.harness check --candidate lora_v5
+  ```
 
 ### 우선순위 1 — 5주차 마무리 ✅ (이번 세션 완료)
 - [x] **C1**: `CHANGELOG.md` `[v1.1.0]` 섹션 추가 (5주차 + E2E + warm-up + numpy 핀)
