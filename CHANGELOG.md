@@ -7,6 +7,23 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+### Added — 진단/CI 강화 (2026-05-28)
+- `vlm/bench/scorer.py` — 필드별/케이스별 평가 분리
+  - prediction 4필드 각각 `distinct_2__{필드}` 측정 → "권고" 필드가 v3/v4 에서 baseline 대비 **-69.7%** (가장 심한 암기 패턴) 진단
+  - normal/abnormal 케이스 분리 ROUGE/distinct (현 held-out 50건은 모두 normal — abnormal eval 보강 필요성 확인)
+- `vlm/bench/harness.py` — `trend` 서브커맨드 추가. `runs/` 의 모든 실행을 시간순 metric 추이 표로 정리 (`score_trend.md`)
+- `tests/test_eval_harness.py` — pytest 7건 (registry 파싱/필드/라벨 유일성/baseline 등록/메트릭 키 정합성/harness import/regression 자기-비교)
+  - **실제 YAML 버그 자동 감지**: `grade_match_rate:{...}` colon-space 누락으로 키 일부로 파싱되던 회귀 임계치 버그를 pytest 가 잡아냄
+
+### Started — v5 학습 (2026-05-28, 백그라운드)
+- `vlm/train/qwen3vl_lora_v5.yaml` — 다양성 회복 가설
+  - lora_rank 64 → 32, lora_alpha 128 → 64 (capacity 절반)
+  - lora_dropout 0.05 → 0.10 (regularization ↑)
+  - 데이터는 v4 동일 (livestock_train_v4.json 8,110건)
+  - 합격 기준: ROUGE_L ≥ 0.85 + distinct_2 ≥ 0.28 (baseline -10% 안)
+- `vlm/bench/registry.yaml` — `lora_v5` 등록 (학습 완료 후 `harness run --models lora_v5` 로 한 줄 검증)
+- 출력: `vlm/train/output/qwen3vl-lora-v5/`, 로그: `vlm/train/training_v5.log`
+
 ### Added — Eval harness (2026-05-27)
 - `vlm/bench/registry.yaml` — 모델/평가셋/회귀 임계치 선언적 등록 (6 모델: base + lora_v1/v2_prejosa/v2_corrected/v3/v4)
 - `vlm/bench/harness.py` — 단일 진입점 `run`/`score`/`check` 서브커맨드

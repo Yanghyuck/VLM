@@ -54,6 +54,7 @@ REGISTRY_PATH = ROOT / "vlm" / "bench" / "registry.yaml"
 RUNS_DIR      = ROOT / "vlm" / "bench" / "runs"
 REPORT_PATH   = ROOT / "vlm" / "bench" / "score_report.md"
 REGRESSION_PATH = ROOT / "vlm" / "bench" / "regression.json"
+TREND_PATH    = ROOT / "vlm" / "bench" / "score_trend.md"
 
 
 # ── 유틸 ─────────────────────────────────────────────────────────────────────
@@ -250,6 +251,86 @@ def cmd_check(args, reg: dict):
         sys.exit(1)
 
 
+# ── trend 서브커맨드 ────────────────────────────────────────────────────────
+
+def cmd_trend(args, reg: dict):
+    """runs/ 디렉터리의 모든 실행을 시간순으로 모아 per-label metric 추이 작성."""
+    if not RUNS_DIR.exists():
+        safe_print(f"[trend] runs 디렉터리 없음: {RUNS_DIR}")
+        sys.exit(2)
+
+    entries: list[dict] = []
+    for d in sorted(RUNS_DIR.iterdir()):
+        if not d.is_dir():
+            continue
+        manifest_p = d / "manifest.json"
+        results_p  = d / "results.jsonl"
+        if not (manifest_p.exists() and results_p.exists()):
+            continue
+        try:
+            with open(manifest_p, encoding="utf-8") as f:
+                man = json.load(f)
+            records = bench_scorer.load_jsonl(results_p)
+            m = bench_scorer.evaluate(records)
+        except Exception as e:
+            safe_print(f"[trend] {d.name} 스킵: {e}")
+            continue
+        entries.append({
+            "run_dir":   d.name,
+            "label":     man.get("label"),
+            "started":   man.get("started_utc"),
+            "git_sha":   (man.get("git_sha") or "")[:7],
+            "metrics":   m,
+        })
+
+    if not entries:
+        safe_print("[trend] 유효한 run 없음. `harness run` 으로 실행 결과를 먼저 생성하세요.")
+        sys.exit(2)
+
+    # 라벨별로 group → 시간순 정렬
+    by_label: dict[str, list[dict]] = {}
+    for e in entries:
+        by_label.setdefault(e["label"], []).append(e)
+    for lbl in by_label:
+        by_label[lbl].sort(key=lambda x: x["started"] or "")
+
+    track_keys = [
+        ("rouge_l",         "ROUGE-L"),
+        ("rouge_l_max",     "ROUGE-L max"),
+        ("bert_score_f1",   "BERT F1"),
+        ("distinct_2",      "Distinct-2"),
+        ("grade_match_rate","Grade 일치율"),
+        ("elapsed_avg_sec", "Avg 추론(초)"),
+    ]
+
+    with open(TREND_PATH, "w", encoding="utf-8") as f:
+        f.write("# Eval Harness — 시간순 metric 추이\n\n")
+        f.write(f"총 {len(entries)}개 run, {len(by_label)}개 라벨\n\n")
+        for lbl in sorted(by_label):
+            runs = by_label[lbl]
+            f.write(f"## `{lbl}` — {len(runs)}회 실행\n\n")
+            f.write("| started_utc | git | " + " | ".join(name for _, name in track_keys) + " |\n")
+            f.write("|" + "|".join(["---"] * (2 + len(track_keys))) + "|\n")
+            prev: dict | None = None
+            for r in runs:
+                m = r["metrics"]
+                row = [r["started"] or "-", r["git_sha"] or "-"]
+                for k, _ in track_keys:
+                    v = m.get(k, -1.0)
+                    cell = f"{v:.4f}" if isinstance(v, (int, float)) and v != -1.0 else "N/A"
+                    if prev is not None:
+                        pv = prev.get(k, -1.0)
+                        if isinstance(v, (int, float)) and isinstance(pv, (int, float)) and pv not in (0, -1.0) and v != -1.0:
+                            delta = (v - pv) / pv * 100
+                            cell += f" ({delta:+.1f}%)"
+                    row.append(cell)
+                f.write("| " + " | ".join(row) + " |\n")
+                prev = m
+            f.write("\n")
+
+    safe_print(f"[trend] {TREND_PATH} ({len(entries)} runs)")
+
+
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
 def _select_models(reg: dict, names: list[str] | None) -> list[dict]:
@@ -374,6 +455,8 @@ def main():
     pc.add_argument("--baseline",  type=str, default=None)
     pc.add_argument("--prefer-runs", action="store_true")
 
+    pt = sub.add_parser("trend", help="runs/ 의 모든 실행을 시간순 metric 추이로 정리")
+
     args = p.parse_args()
     reg = load_registry()
 
@@ -383,6 +466,8 @@ def main():
         cmd_score(args, reg)
     elif args.cmd == "check":
         cmd_check(args, reg)
+    elif args.cmd == "trend":
+        cmd_trend(args, reg)
 
 
 if __name__ == "__main__":

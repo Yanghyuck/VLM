@@ -1,0 +1,72 @@
+### v5 — 다양성 회복 (rank 다운 + dropout ↑, 데이터는 v4 동일)
+###
+### 가설:
+### - v3 (rank 128) / v4 (rank 64) 모두 distinct_2 -26.9% (학습 reference 암기)
+### - "권고" 필드 distinct_2: v2-corrected 0.0659 → v3/v4 0.0200 (-69.7%) — 가장 심한 암기
+### - capacity 를 줄이고 dropout 을 키워 reference 의 표면 패턴 암기를 억제
+###
+### 핵심 변경 (v4 → v5):
+### - lora_rank: 64 → 32 (capacity 절반)
+### - lora_alpha: 128 → 64 (alpha/rank=2 비율 유지)
+### - lora_dropout: 0.05 → 0.10 (regularization 강화)
+### - 학습 데이터: livestock_train_v4.json (8,110) 그대로 — 데이터 변경 없이 hyperparam 만 변경
+### - 출력 디렉터리: qwen3vl-lora-v5/ (v4 보존)
+###
+### 검증:
+### - 학습 후 `python -m vlm.bench.harness run --models lora_v5 --force`
+### - `python -m vlm.bench.harness score --check` → distinct_2 가 baseline(-10%) 안에 들어오는지
+### - 합격 기준: ROUGE_L >= 0.85 (v2-corrected 0.87 근처 유지) + distinct_2 >= 0.28 (-10% 안)
+
+### 모델
+model_name_or_path: Qwen/Qwen3-VL-8B-Instruct
+
+### 학습 방법
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 32                            # v4 64 → 32 (capacity 절반, 암기 억제)
+lora_alpha: 64                           # alpha/rank=2 비율 유지
+lora_dropout: 0.10                       # v4 0.05 → 0.10 (regularization ↑)
+lora_target: all
+
+### Vision 학습 (v4 와 동일)
+freeze_vision_tower: false
+freeze_multi_modal_projector: false
+
+### 데이터셋 (v4 와 동일)
+dataset: livestock_ko_v4
+dataset_dir: C:/Users/IPC/Desktop/git/LLaMA-Factory/data
+template: qwen3_vl_nothink
+cutoff_len: 1024
+max_samples: 30000
+overwrite_cache: true
+preprocessing_num_workers: 1
+
+### 출력 (v5 별도 디렉터리)
+output_dir: vlm/train/output/qwen3vl-lora-v5
+logging_steps: 10
+save_steps: 200
+save_total_limit: 3
+plot_loss: true
+overwrite_output_dir: true
+
+### 학습 하이퍼파라미터 (v4 와 동일)
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 32
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000
+dataloader_num_workers: 0
+
+### 검증
+val_size: 0.1
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 200
+
+### 이미지
+image_max_pixels: 100352
+video_max_pixels: 50176

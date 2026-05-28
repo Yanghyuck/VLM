@@ -1,10 +1,10 @@
 # 벤치마크 결과 — Qwen3-VL-8B base vs lora_v1 vs lora_v2_prejosa vs lora_v2_corrected vs lora_v3 vs lora_v4
 
-**평가셋 크기**: 50 건
+**평가셋 크기**: 50 건  ·  **baseline**: `lora_v2_corrected`
 
-## 점수 비교
+## 점수 비교 (전체)
 
-| 지표 | base | base vs lora_v2_corrected | lora_v1 | lora_v1 vs lora_v2_corrected | lora_v2_prejosa | lora_v2_prejosa vs lora_v2_corrected | lora_v2_corrected | lora_v3 | lora_v3 vs lora_v2_corrected | lora_v4 | lora_v4 vs lora_v2_corrected |
+| 지표 | base | Δ | lora_v1 | Δ | lora_v2_prejosa | Δ | lora_v2_corrected | lora_v3 | Δ | lora_v4 | Δ |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | JSON 파싱 성공률 | 1.0000 | +0.0% | 1.0000 | +0.0% | 1.0000 | +0.0% | 1.0000 | 1.0000 | +0.0% | 1.0000 | +0.0% |
 | 등급 일치율 | 1.0000 | +0.0% | 1.0000 | +0.0% | 1.0000 | +0.0% | 1.0000 | 1.0000 | +0.0% | 1.0000 | +0.0% |
@@ -16,6 +16,37 @@
 | Distinct-2 (다양성, A4) | 0.3304 | +5.2% | 0.3222 | +2.5% | 0.2602 | -17.2% | 0.3142 | 0.2296 | -26.9% | 0.2296 | -26.9% |
 | 평균 추론 시간 (초) | 15.8200 | -27.2% | 26.7100 | +23.0% | 23.7000 | +9.1% | 21.7200 | 23.9800 | +10.4% | 22.7000 | +4.5% |
 
+## 필드별 다양성 (Distinct-2)
+
+v3/v4 의 암기 패턴이 어느 필드에서 발생하는지 진단.
+
+| 지표 | base | Δ | lora_v1 | Δ | lora_v2_prejosa | Δ | lora_v2_corrected | lora_v3 | Δ | lora_v4 | Δ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Distinct-2 · 3문장_요약 | 0.3304 | +5.2% | 0.3222 | +2.5% | 0.2602 | -17.2% | 0.3142 | 0.2296 | -26.9% | 0.2296 | -26.9% |
+| Distinct-2 · 비정상_근거 | N/A | — | N/A | — | N/A | — | N/A | N/A | — | N/A | — |
+| Distinct-2 · 주의사항 | 1.0000 | — | 0.7063 | — | 0.0000 | — | 0.0000 | 0.1693 | — | 0.4251 | — |
+| Distinct-2 · 권고 | 0.2323 | +252.5% | 0.1188 | +80.3% | 0.1369 | +107.7% | 0.0659 | 0.0200 | -69.7% | 0.0200 | -69.7% |
+
+## 케이스별 분리 (normal vs abnormal)
+
+학습 분포에서 비정상(error_code 비0) 케이스의 ROUGE/distinct 가 normal 케이스와 동일하면, abnormal task 도 reference 를 암기한 것.
+
+### normal
+
+| 지표 | base | lora_v1 | lora_v2_prejosa | lora_v2_corrected | lora_v3 | lora_v4 |
+|---|---|---|---|---|---|---|
+| n | 50 | 50 | 50 | 50 | 50 | 50 |
+| rouge_l | 0.6958 | 0.7390 | 0.8946 | 0.8687 | 1.0000 | 1.0000 |
+| distinct_2 | 0.3304 | 0.3222 | 0.2602 | 0.3142 | 0.2296 | 0.2296 |
+
+### abnormal
+
+| 지표 | base | lora_v1 | lora_v2_prejosa | lora_v2_corrected | lora_v3 | lora_v4 |
+|---|---|---|---|---|---|---|
+| n | 0 | 0 | 0 | 0 | 0 | 0 |
+| rouge_l | N/A | N/A | N/A | N/A | N/A | N/A |
+| distinct_2 | N/A | N/A | N/A | N/A | N/A | N/A |
+
 ## 해석
 
 - **JSON 파싱 성공률**: 4 필드(`3문장_요약`, `비정상_근거`, `주의사항`, `권고`) 모두 존재 + summary 비어있지 않은 비율
@@ -25,4 +56,6 @@
 - **ROUGE-L max (A3)**: paraphrase 정답들 중 max — 표현 다양성 보상
 - **BERTScore F1 (ko)**: 한국어 BERT 임베딩 기반 의미 유사도 (0~1)
 - **Distinct-1/2 (A4)**: 응답 모음의 unique unigram/bigram 비율. 높으면 다양성 ↑
+- **필드별 Distinct-2**: 4 필드 각각의 다양성. 특정 필드만 떨어지면 그 필드에 암기 집중.
+- **케이스별 분리**: normal/abnormal 의 ROUGE/distinct. abnormal 도 1.0 이면 합성 reference 까지 암기.
 - **개선 % 계산 기준**: `lora_v2_corrected` 대비

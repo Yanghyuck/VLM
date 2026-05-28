@@ -648,7 +648,9 @@ curl -X POST http://localhost:8000/v1/report \
 
 작업 트리 clean. `local-vlm-train` 푸시 완료. `v1.2.0` 태그 + GitHub Release 게시 완료(2026-05-19). 다음 세션 진입 시 이 섹션부터 확인.
 
-### 이번 세션 추가 — Eval harness 도입 (2026-05-27)
+### 이번 세션 추가 — Eval harness 도입 + 진단/CI 강화 + v5 학습 (2026-05-27 ~ 2026-05-28)
+
+#### Phase 1 — Eval harness 기본 (2026-05-27)
 - [x] **`vlm/bench/registry.yaml`** — 모델/평가셋/회귀 임계치 선언적 등록
   - 등록 모델 6종: `base`, `lora_v1`, `lora_v2_prejosa`, `lora_v2_corrected`(baseline), `lora_v3`, `lora_v4`
   - 회귀 임계치: `rouge_l/rouge_l_max -5%`, `bert_score_f1 -3%`, `distinct_2 -10%`, `grade_match_rate -2%`, `elapsed_avg_sec +30%`
@@ -658,15 +660,39 @@ curl -X POST http://localhost:8000/v1/report \
   - `check --candidate <label>` — baseline vs candidate 회귀 검사 단독 실행
   - manifest: git_sha, adapter SHA256, eval_set SHA256, env(python/torch/transformers/peft/numpy)
 - [x] **검증**: `harness score --check` 실행 → 기존 6 results → 동일한 N-way 리포트 + 회귀 위반 자동 감지
-  - v3/v4 의 distinct_2 -26.9% (학습 reference 암기) 회귀 임계치로 자동 fail
-  - exit code 1 정상 반환
-- [x] **`vlm/bench/regression.json`** — 회귀 상세(per-metric delta_pct, rule, violated) 저장
-- 사용 예 (다음 v5 학습 후 한 줄 검증):
-  ```
-  python -m vlm.bench.harness run --models lora_v5
-  python -m vlm.bench.harness score --check
-  python -m vlm.bench.harness check --candidate lora_v5
-  ```
+
+#### Phase 2 — 진단/CI 강화 (2026-05-28)
+- [x] **A1 — 필드별/케이스별 평가 분리** (`vlm/bench/scorer.py`)
+  - prediction 4필드 각각 `distinct_2__{필드}` 측정 → "권고" 필드가 v3/v4 에서 **-69.7%** (가장 심한 암기) 진단
+  - normal/abnormal 케이스 분리 ROUGE/distinct (현 held-out 50건은 모두 normal — abnormal eval 보강 필요)
+- [x] **A2 — `harness trend` 서브커맨드** — `runs/` 의 모든 실행을 시간순 metric 추이 표로 정리, `score_trend.md` 생성. 누적 회귀/개선 한눈 추적
+- [x] **A3 — `tests/test_eval_harness.py`** — pytest 7건
+  - registry 파싱/필수 필드/라벨 유일성 검증
+  - baseline 라벨 등록 여부, 회귀 메트릭 키가 scorer 반환에 존재하는지 cross-check
+  - **실제 버그 발견 차단**: `grade_match_rate:{...}` colon-space 누락으로 키 일부로 파싱되던 YAML 버그를 pytest 가 잡아냄
+  - regression.json 자기-비교 0 violation 보장
+
+#### Phase 3 — v5 학습 (2026-05-28, 진행 중)
+- [x] **B1 — `vlm/train/qwen3vl_lora_v5.yaml`** — 다양성 회복 가설
+  - lora_rank 64 → 32, lora_alpha 128 → 64 (capacity 절반)
+  - lora_dropout 0.05 → 0.10 (regularization ↑)
+  - 데이터 v4 동일 (livestock_train_v4.json 8,110건)
+  - 합격 기준: ROUGE_L >= 0.85 + distinct_2 >= 0.28 (baseline -10% 안)
+  - registry.yaml 에 `lora_v5` 등록 완료
+- [ ] **B2 — 학습 실행** (백그라운드, 2026-05-28 ~) — `llamafactory-cli train qwen3vl_lora_v5.yaml`
+  - 로그: `vlm/train/training_v5.log`
+  - 출력: `vlm/train/output/qwen3vl-lora-v5/`
+- [ ] **B3 — harness 로 v5 검증** (학습 완료 후 자동 진행)
+  - `python -m vlm.bench.harness run --models lora_v5`
+  - `python -m vlm.bench.harness score --check`
+  - `python -m vlm.bench.harness trend`
+
+#### 사용 예 (v5 학습 완료 후 한 줄 회귀 판정)
+```
+python -m vlm.bench.harness run --models lora_v5
+python -m vlm.bench.harness score --check
+python -m vlm.bench.harness trend
+```
 
 ### 우선순위 1 — 5주차 마무리 ✅ (이번 세션 완료)
 - [x] **C1**: `CHANGELOG.md` `[v1.1.0]` 섹션 추가 (5주차 + E2E + warm-up + numpy 핀)

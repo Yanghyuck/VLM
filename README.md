@@ -455,9 +455,18 @@ python -m vlm.bench.harness score --check
 
 # baseline(lora_v2_corrected) 대비 후보 회귀만 검사
 python -m vlm.bench.harness check --candidate lora_v5
+
+# runs/ 시간순 metric 추이 (누적 회귀/개선 추적)
+python -m vlm.bench.harness trend
 ```
 
-산출물: `vlm/bench/runs/<ts>__<sha>__<label>/{results.jsonl, manifest.json}`, `vlm/bench/score_report.md`, `vlm/bench/regression.json`
+산출물:
+- `vlm/bench/runs/<ts>__<sha>__<label>/{results.jsonl, manifest.json}`
+- `vlm/bench/score_report.md` — N-way 비교 + 필드별 distinct + normal/abnormal 분리
+- `vlm/bench/regression.json` — per-metric delta_pct / rule / violated 상세
+- `vlm/bench/score_trend.md` — 시간순 metric 추이 (각 라벨 별)
+
+CI/CD 통합: `pytest tests/test_eval_harness.py` (registry 파싱 + baseline 존재 + 메트릭 키 정합성)
 
 ## 🐳 Docker 실행
 

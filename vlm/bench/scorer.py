@@ -120,6 +120,27 @@ def compute_bert_score(pred_texts: list[str], ref_texts: list[str]) -> float:
         return -1.0
 
 
+def _is_normal_case(rec: dict) -> bool:
+    ec = (rec.get("metadata") or {}).get("error_code") or {}
+    return all(v == 0 for v in ec.values()) if ec else True
+
+
+def _collect_field_texts(records: list[dict]) -> dict[str, list[str]]:
+    """prediction 4필드 각각의 텍스트 모음 (None/list 안전 처리)."""
+    out = {"3문장_요약": [], "비정상_근거": [], "주의사항": [], "권고": []}
+    for r in records:
+        p = r.get("prediction") or {}
+        for k in out:
+            v = p.get(k)
+            if v is None:
+                continue
+            if isinstance(v, list):
+                out[k].append(" ".join(str(x) for x in v))
+            else:
+                out[k].append(str(v))
+    return out
+
+
 def evaluate(records: list[dict]) -> dict:
     n = len(records)
     if n == 0:
@@ -157,12 +178,43 @@ def evaluate(records: list[dict]) -> dict:
     rouge_l_avg     = mean(rouge_scores)     if rouge_scores     else -1.0
     rouge_l_max_avg = mean(rouge_max_scores) if rouge_max_scores else -1.0
 
-    # A4 — 응답 다양성 (distinct-1/2)
+    # A4 — 응답 다양성 (summary 필드, 전체)
     distinct_1 = compute_distinct_n(pred_texts, 1)
     distinct_2 = compute_distinct_n(pred_texts, 2)
 
     # BERTScore (선택)
     bert_f1 = compute_bert_score(pred_texts, ref_texts) if pred_texts else -1.0
+
+    # ── 필드별 distinct-2 (v3/v4 암기 진단용) ───────────────────────────────
+    field_texts = _collect_field_texts(records)
+    field_distinct: dict[str, float] = {}
+    for fname, texts in field_texts.items():
+        field_distinct[f"distinct_2__{fname}"] = round(compute_distinct_n(texts, 2), 4) if texts else -1.0
+
+    # ── 케이스별(normal/abnormal) 분리 메트릭 ───────────────────────────────
+    split: dict[str, dict] = {}
+    for case in ("normal", "abnormal"):
+        wanted = [r for r in records if (_is_normal_case(r) == (case == "normal"))]
+        if not wanted:
+            split[case] = {"n": 0}
+            continue
+        s_pred, s_ref, s_rouge = [], [], []
+        for r in wanted:
+            if not r.get("prediction"):
+                continue
+            ref = (r.get("tasks", {}).get("summary") or {}).get("reference", "")
+            pred = r["prediction"].get("3문장_요약", "")
+            if pred and ref:
+                rl = compute_rouge_l(pred, ref)
+                if rl >= 0:
+                    s_rouge.append(rl)
+                s_pred.append(pred)
+                s_ref.append(ref)
+        split[case] = {
+            "n":          len(wanted),
+            "rouge_l":    round(mean(s_rouge), 4)               if s_rouge else -1.0,
+            "distinct_2": round(compute_distinct_n(s_pred, 2), 4) if s_pred  else -1.0,
+        }
 
     return {
         "n":                  n,
@@ -175,6 +227,8 @@ def evaluate(records: list[dict]) -> dict:
         "distinct_1":         round(distinct_1, 4),
         "distinct_2":         round(distinct_2, 4),
         "elapsed_avg_sec":    round(elapsed_avg, 2),
+        **field_distinct,
+        "split":              split,
     }
 
 
@@ -214,32 +268,62 @@ def write_report(metrics_dict: dict[str, dict], output: Path, baseline_key: str 
         ("distinct_2",        "Distinct-2 (다양성, A4)"),
         ("elapsed_avg_sec",   "평균 추론 시간 (초)"),
     ]
+    field_keys = [
+        ("distinct_2__3문장_요약", "Distinct-2 · 3문장_요약"),
+        ("distinct_2__비정상_근거", "Distinct-2 · 비정상_근거"),
+        ("distinct_2__주의사항",   "Distinct-2 · 주의사항"),
+        ("distinct_2__권고",       "Distinct-2 · 권고"),
+    ]
 
-    with open(output, "w", encoding="utf-8") as f:
-        f.write(f"# 벤치마크 결과 — Qwen3-VL-8B {' vs '.join(labels)}\n\n")
-        f.write(f"**평가셋 크기**: {baseline['n']} 건\n\n")
-        f.write("## 점수 비교\n\n")
-
-        # 헤더
+    def write_table(f, keys_):
         f.write("| 지표 |")
         for lbl in labels:
             f.write(f" {lbl} |")
             if lbl != baseline_key:
-                f.write(f" {lbl} vs {baseline_key} |")
+                f.write(f" Δ |")
         f.write("\n")
         f.write("|---|" + "|".join(["---"] * (len(labels) + sum(1 for l in labels if l != baseline_key))) + "|\n")
-
-        # 데이터
-        for key, label in keys:
+        for key, label in keys_:
             f.write(f"| {label} |")
             for lbl in labels:
                 m = metrics_dict[lbl]
-                f.write(f" {cell(m[key])} |")
+                v = m.get(key, -1.0)
+                f.write(f" {cell(v)} |")
                 if lbl != baseline_key:
-                    f.write(f" {diff(baseline[key], m[key])} |")
+                    f.write(f" {diff(baseline.get(key, -1.0), v)} |")
             f.write("\n")
 
-        f.write("\n## 해석\n\n")
+    with open(output, "w", encoding="utf-8") as f:
+        f.write(f"# 벤치마크 결과 — Qwen3-VL-8B {' vs '.join(labels)}\n\n")
+        f.write(f"**평가셋 크기**: {baseline['n']} 건  ·  **baseline**: `{baseline_key}`\n\n")
+
+        f.write("## 점수 비교 (전체)\n\n")
+        write_table(f, keys)
+
+        f.write("\n## 필드별 다양성 (Distinct-2)\n\n")
+        f.write("v3/v4 의 암기 패턴이 어느 필드에서 발생하는지 진단.\n\n")
+        write_table(f, field_keys)
+
+        # 케이스별 split — normal vs abnormal
+        f.write("\n## 케이스별 분리 (normal vs abnormal)\n\n")
+        f.write("학습 분포에서 비정상(error_code 비0) 케이스의 ROUGE/distinct 가 normal 케이스와 동일하면, abnormal task 도 reference 를 암기한 것.\n\n")
+        for case in ("normal", "abnormal"):
+            f.write(f"### {case}\n\n")
+            f.write("| 지표 |")
+            for lbl in labels:
+                f.write(f" {lbl} |")
+            f.write("\n")
+            f.write("|---|" + "|".join(["---"] * len(labels)) + "|\n")
+            for sub_key in ("n", "rouge_l", "distinct_2"):
+                f.write(f"| {sub_key} |")
+                for lbl in labels:
+                    s = (metrics_dict[lbl].get("split") or {}).get(case) or {}
+                    v = s.get(sub_key, -1.0 if sub_key != "n" else 0)
+                    f.write(f" {cell(v)} |")
+                f.write("\n")
+            f.write("\n")
+
+        f.write("## 해석\n\n")
         f.write("- **JSON 파싱 성공률**: 4 필드(`3문장_요약`, `비정상_근거`, `주의사항`, `권고`) 모두 존재 + summary 비어있지 않은 비율\n")
         f.write("- **등급 일치율**: 모델이 출력한 summary 안에 정답 grade 문자열(`1+`, `1`, `2`, `등외`)이 포함된 비율\n")
         f.write("- **수치 인용 정확도**: 등지방/뭇갈래근/도체중 숫자가 응답에 정확히 포함된 비율 (0~1)\n")
@@ -247,6 +331,8 @@ def write_report(metrics_dict: dict[str, dict], output: Path, baseline_key: str 
         f.write("- **ROUGE-L max (A3)**: paraphrase 정답들 중 max — 표현 다양성 보상\n")
         f.write("- **BERTScore F1 (ko)**: 한국어 BERT 임베딩 기반 의미 유사도 (0~1)\n")
         f.write("- **Distinct-1/2 (A4)**: 응답 모음의 unique unigram/bigram 비율. 높으면 다양성 ↑\n")
+        f.write("- **필드별 Distinct-2**: 4 필드 각각의 다양성. 특정 필드만 떨어지면 그 필드에 암기 집중.\n")
+        f.write("- **케이스별 분리**: normal/abnormal 의 ROUGE/distinct. abnormal 도 1.0 이면 합성 reference 까지 암기.\n")
         f.write(f"- **개선 % 계산 기준**: `{baseline_key}` 대비\n")
 
 

@@ -26,7 +26,7 @@ regression:
   rouge_l_max:     {min_delta_pct: -5.0}
   bert_score_f1:   {min_delta_pct: -3.0}
   distinct_2:      {min_delta_pct: -10.0}
-  grade_match_rate:{min_delta_pct: -2.0}
+  grade_match_rate: {min_delta_pct: -2.0}
   elapsed_avg_sec: {max_delta_pct: 30.0}   # 30% 이상 느려지면 fail
 
 # -----------------------------------------------------------------------------
@@ -75,3 +75,8 @@ models:
     adapter_path: vlm/train/output/qwen3vl-lora-v4
     legacy_results: vlm/bench/results_lora_v4.jsonl
     note: "v4 — 합성 검출실패 500건 보강, rank 64 유지"
+
+  - label: lora_v5
+    mode: lora
+    adapter_path: vlm/train/output/qwen3vl-lora-v5
+    note: "v5 — 다양성 회복 가설 (rank 32, dropout 0.10), v4 데이터 그대로"
