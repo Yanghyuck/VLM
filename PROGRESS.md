@@ -679,17 +679,38 @@ curl -X POST http://localhost:8000/v1/report \
   - 데이터 v4 동일 (livestock_train_v4.json 8,110건)
   - 합격 기준: ROUGE_L >= 0.85 + distinct_2 >= 0.28 (baseline -10% 안)
   - registry.yaml 에 `lora_v5` 등록 완료
-- [ ] **B2 — 학습 실행** (백그라운드, 2026-05-28 ~) — `llamafactory-cli train qwen3vl_lora_v5.yaml`
-  - 로그: `vlm/train/training_v5.log`
-  - 출력: `vlm/train/output/qwen3vl-lora-v5/`
-- [ ] **B3 — harness 로 v5 검증** (학습 완료 후 자동 진행)
-  - `python -m vlm.bench.harness run --models lora_v5`
-  - `python -m vlm.bench.harness score --check`
-  - `python -m vlm.bench.harness trend`
+- [x] **B2 — 학습 완료** (2026-05-28 09:34 → 15:43, **5h 49m**)
+  - train_loss **0.180** (v4 0.160 대비 +12.5% — capacity 축소 효과 확인 ✓)
+  - eval_loss **0.080** (v2-corrected 0.079 와 동일 — 일반화 정상)
+  - 687/687 step, 3 epoch, checkpoint-200/400/600/687 보존
+  - 출력: `vlm/train/output/qwen3vl-lora-v5/adapter_model.safetensors` (400MB, rank 32 라 v4 840MB 대비 절반)
+- [x] **B3 — harness 7-way 검증** (2026-05-28 16:05)
+  - 첫 정식 `runs/` 디렉터리: `20260528T064858Z__b27faf0__lora_v5/` (manifest+results, eval_set SHA256 동일 확인)
+  - **합격기준 미달**: distinct_2 = 0.2381 (기준 ≥ 0.28, baseline 대비 -24.2%)
+  - ROUGE_L 0.9983 / BERT 0.9991 → 학습 reference 거의 완전 학습 (v3/v4 와 동일 양상)
+  - 추론 평균 20.06s (전 모델 중 최단)
 
-#### 사용 예 (v5 학습 완료 후 한 줄 회귀 판정)
+  **필드별 진단 (가설 부분 적중):**
+  | 필드 | baseline | v4 | v5 | v4→v5 |
+  |---|---|---|---|---|
+  | 3문장_요약 | 0.3142 | 0.2296 | 0.2381 | +3.7% |
+  | 권고 | 0.0659 | 0.0200 | **0.1048** | **+424%** ⭐ |
+  | 주의사항 | 0.0000 | 0.4251 | **0.7042** | +66% ⭐ |
+
+  capacity 축소는 "권고/주의사항" 필드 다양성 회복에 **큰 효과**. 그러나 "3문장_요약" 필드는 capacity 축소만으로 깨지지 않음 — **데이터 측 reference 패턴(2 paraphrase)이 일관적이라 모델 크기와 무관하게 외워짐**.
+
+  **결론: v5 비채택, 운영 어댑터 v4 유지**
+
+#### v6 방향 (이번 결과로 결정)
+- capacity 측 천장 도달 확인. 다음은 **데이터 측 paraphrase 증강** 필수:
+  - `_summary_response` / `_summary_response_alt` 외에 새 paraphrase 함수 2-3개 추가 → references 4-5개로 늘리기
+  - 응답 형식 자체 다양화 (현재 거의 단일 양식, 불릿/문단 혼용 학습)
+- **abnormal 평가셋 별도 추출** — 현 held-out 50건은 모두 normal. abnormal 50건 별도면 진짜 환각/일반화 측정 가능
+- 그 외: DPO/선호 학습 (preference pair 라벨링 비용 부담)
+
+#### 사용 예 (v6 학습 완료 후 한 줄 회귀 판정)
 ```
-python -m vlm.bench.harness run --models lora_v5
+python -m vlm.bench.harness run --models lora_v6
 python -m vlm.bench.harness score --check
 python -m vlm.bench.harness trend
 ```

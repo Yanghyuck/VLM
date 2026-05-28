@@ -1,6 +1,6 @@
 {
   "baseline": "lora_v2_corrected",
-  "checked_utc": "20260528T003129Z",
+  "checked_utc": "20260528T070707Z",
   "regressions": [
     {
       "candidate": "base",
@@ -361,6 +361,78 @@
       },
       "violated": false,
       "reason": ""
+    },
+    {
+      "candidate": "lora_v5",
+      "metric": "rouge_l",
+      "baseline": 0.8687,
+      "value": 0.9983,
+      "delta_pct": 14.92,
+      "rule": {
+        "min_delta_pct": -5.0
+      },
+      "violated": false,
+      "reason": ""
+    },
+    {
+      "candidate": "lora_v5",
+      "metric": "rouge_l_max",
+      "baseline": 0.8687,
+      "value": 0.9983,
+      "delta_pct": 14.92,
+      "rule": {
+        "min_delta_pct": -5.0
+      },
+      "violated": false,
+      "reason": ""
+    },
+    {
+      "candidate": "lora_v5",
+      "metric": "bert_score_f1",
+      "baseline": 0.9253,
+      "value": 0.9991,
+      "delta_pct": 7.98,
+      "rule": {
+        "min_delta_pct": -3.0
+      },
+      "violated": false,
+      "reason": ""
+    },
+    {
+      "candidate": "lora_v5",
+      "metric": "distinct_2",
+      "baseline": 0.3142,
+      "value": 0.2381,
+      "delta_pct": -24.22,
+      "rule": {
+        "min_delta_pct": -10.0
+      },
+      "violated": true,
+      "reason": "-24.2% < min -10.0%"
+    },
+    {
+      "candidate": "lora_v5",
+      "metric": "grade_match_rate",
+      "baseline": 1.0,
+      "value": 1.0,
+      "delta_pct": 0.0,
+      "rule": {
+        "min_delta_pct": -2.0
+      },
+      "violated": false,
+      "reason": ""
+    },
+    {
+      "candidate": "lora_v5",
+      "metric": "elapsed_avg_sec",
+      "baseline": 21.72,
+      "value": 20.06,
+      "delta_pct": -7.64,
+      "rule": {
+        "max_delta_pct": 30.0
+      },
+      "violated": false,
+      "reason": ""
     }
   ],
   "metrics": {
@@ -514,6 +586,32 @@
           "n": 50,
           "rouge_l": 1.0,
           "distinct_2": 0.2296
+        },
+        "abnormal": {
+          "n": 0
+        }
+      }
+    },
+    "lora_v5": {
+      "n": 50,
+      "json_parse_rate": 1.0,
+      "grade_match_rate": 1.0,
+      "number_citation": 1.0,
+      "rouge_l": 0.9983,
+      "rouge_l_max": 0.9983,
+      "bert_score_f1": 0.9991,
+      "distinct_1": 0.1228,
+      "distinct_2": 0.2381,
+      "elapsed_avg_sec": 20.06,
+      "distinct_2__3문장_요약": 0.2381,
+      "distinct_2__비정상_근거": -1.0,
+      "distinct_2__주의사항": 0.7042,
+      "distinct_2__권고": 0.1048,
+      "split": {
+        "normal": {
+          "n": 50,
+          "rouge_l": 0.9983,
+          "distinct_2": 0.2381
         },
         "abnormal": {
           "n": 0

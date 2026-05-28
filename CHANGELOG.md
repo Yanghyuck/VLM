@@ -15,14 +15,22 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 - `tests/test_eval_harness.py` — pytest 7건 (registry 파싱/필드/라벨 유일성/baseline 등록/메트릭 키 정합성/harness import/regression 자기-비교)
   - **실제 YAML 버그 자동 감지**: `grade_match_rate:{...}` colon-space 누락으로 키 일부로 파싱되던 회귀 임계치 버그를 pytest 가 잡아냄
 
-### Started — v5 학습 (2026-05-28, 백그라운드)
-- `vlm/train/qwen3vl_lora_v5.yaml` — 다양성 회복 가설
-  - lora_rank 64 → 32, lora_alpha 128 → 64 (capacity 절반)
-  - lora_dropout 0.05 → 0.10 (regularization ↑)
-  - 데이터는 v4 동일 (livestock_train_v4.json 8,110건)
-  - 합격 기준: ROUGE_L ≥ 0.85 + distinct_2 ≥ 0.28 (baseline -10% 안)
-- `vlm/bench/registry.yaml` — `lora_v5` 등록 (학습 완료 후 `harness run --models lora_v5` 로 한 줄 검증)
-- 출력: `vlm/train/output/qwen3vl-lora-v5/`, 로그: `vlm/train/training_v5.log`
+### Trained — v5 학습 완료 + 비채택 결정 (2026-05-28)
+- 학습 5h 49m (09:34 → 15:43), 687/687 step / 3 epoch
+  - train_loss **0.180** (v4 0.160 대비 +12.5% — capacity 축소 효과 확인 ✓)
+  - eval_loss **0.080** (v2-corrected 0.079 와 동일 — 일반화 정상)
+  - 어댑터 400MB (rank 32 → v4 840MB 의 절반)
+- 7-way harness 평가 (`vlm/bench/runs/20260528T064858Z__b27faf0__lora_v5/`):
+  - ROUGE_L **0.9983** / BERT **0.9991** → 학습 reference 거의 완전 학습 (v3/v4 와 동일 양상)
+  - distinct_2 **0.2381** (합격기준 0.28 미달, baseline -24.2%) → **회귀 자동 fail**
+  - 추론 평균 **20.06s** (전 모델 중 최단)
+- **필드별 진단** (가설 부분 적중):
+  - "권고" 필드: v4 0.0200 → v5 0.1048 (**+424%**) ⭐
+  - "주의사항" 필드: v4 0.4251 → v5 0.7042 (+66%) ⭐
+  - "3문장_요약" 필드: v4 0.2296 → v5 0.2381 (+3.7%, 거의 변화 없음)
+- **결론**: capacity 축소(rank 64→32, dropout 0.05→0.10)는 "권고/주의사항" 다양성 회복에 큰 효과. 그러나 "3문장_요약" 은 데이터 측 reference 패턴(2 paraphrase) 일관성 때문에 capacity 축소만으로 깨지지 않음.
+- **v5 비채택, 운영 어댑터 v4 유지**. v6 방향은 데이터 측 paraphrase 증강(references 4-5개) + abnormal 평가셋 별도 추출
+- 첫 정식 `runs/` 구조 도입 — eval_set SHA256 동일 확인 (`b5972a67...`), adapter SHA256 / env(torch/transformers/peft/numpy) 자동 기록
 
 ### Added — Eval harness (2026-05-27)
 - `vlm/bench/registry.yaml` — 모델/평가셋/회귀 임계치 선언적 등록 (6 모델: base + lora_v1/v2_prejosa/v2_corrected/v3/v4)
