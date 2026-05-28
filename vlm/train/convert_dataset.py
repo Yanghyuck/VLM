@@ -141,6 +141,70 @@ def _summary_response_alt(meta: dict) -> str:
     return f"{s1} {s2} {s3}"
 
 
+def _summary_response_bullet(meta: dict) -> str:
+    """B1 — 헤더 + 불릿 강조형. 구조 자체가 다른 응답."""
+    gender = GENDER_MAP.get(meta["gender"], "미상")
+    grade  = meta["grade"]
+    ec     = meta["error_code"]
+    errors = [label for key, (label, _) in ERROR_LABEL.items() if ec.get(key, 0) == 1]
+    ymd    = meta["slaughter_ymd"]
+    date_str = f"{ymd[:4]}년 {ymd[4:6]}월 {ymd[6:]}일"
+
+    header = f"### 판정 요약 — {grade} 등급"
+    bullets = [
+        f"- 도체번호: {meta['carcass_no']}",
+        f"- 성별/도축일: {gender} / {date_str}",
+        f"- 측정값: 등지방 {meta['backfat_average']}mm · 뭇갈래근 {meta['multifidus_thk']}mm · 도체중 {meta['body_weight']}kg",
+    ]
+    if errors:
+        bullets.append(f"- 검출 오류: {', '.join(errors)}")
+    else:
+        bullets.append("- 검출 상태: 모든 AI 항목 정상")
+    return header + "\n" + "\n".join(bullets)
+
+
+def _summary_response_table(meta: dict) -> str:
+    """B1 — 측정값 마크다운 표 + 한 줄 결론. 가장 구조적으로 다른 형식."""
+    gender = GENDER_MAP.get(meta["gender"], "미상")
+    grade  = meta["grade"]
+    ec     = meta["error_code"]
+    errors = [label for key, (label, _) in ERROR_LABEL.items() if ec.get(key, 0) == 1]
+    ymd    = meta["slaughter_ymd"]
+    date_str = f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}"
+
+    rows = [
+        "| 항목 | 값 |",
+        "|---|---|",
+        f"| 도체번호 | {meta['carcass_no']} |",
+        f"| 성별 | {gender} |",
+        f"| 도축일 | {date_str} |",
+        f"| 등지방 두께 | {meta['backfat_average']} mm |",
+        f"| 뭇갈래근 두께 | {meta['multifidus_thk']} mm |",
+        f"| 도체중 | {meta['body_weight']} kg |",
+        f"| 판정 등급 | **{grade}** |",
+    ]
+    status = ", ".join(errors) if errors else "정상"
+    conclusion = f"\n검출 상태: {status}."
+    return "\n".join(rows) + conclusion
+
+
+def _summary_response_all(meta: dict) -> list[str]:
+    """v6 — summary 4 paraphrase 모음 (round-robin 학습용).
+
+    순서:
+      0: _summary_response          (3문장 정형)
+      1: _summary_response_alt      (등급/측정값 우선)
+      2: _summary_response_bullet   (헤더 + 불릿)
+      3: _summary_response_table    (마크다운 표)
+    """
+    return [
+        _summary_response(meta),
+        _summary_response_alt(meta),
+        _summary_response_bullet(meta),
+        _summary_response_table(meta),
+    ]
+
+
 def _grade_response(meta: dict) -> str:
     grade   = meta["grade"]
     backfat = meta["backfat_average"]
@@ -237,6 +301,7 @@ def convert(
     output_path: Path = OUTPUT_PATH,
     exclude_ids: set[str] | None = None,
     input_path: Path | None = None,
+    paraphrase_mode: str = "single",
 ) -> None:
     """dataset.jsonl 을 ShareGPT 학습 JSON 으로 변환.
 
@@ -246,16 +311,26 @@ def convert(
         exclude_ids: 학습 제외할 도체번호 set (벤치마크 held-out 용)
         input_path: 입력 jsonl (기본 None → INPUT_PATH). v4 augmented 데이터처럼
                     별도 입력 사용 시 명시.
+        paraphrase_mode:
+          - "single"      : v4/v5 동작 — summary/abnormal 각 1개 paraphrase 만
+          - "round_robin" : v6 — 도체 ID 결정적 round-robin
+                            summary: 4 paraphrase 중 (id % 4)
+                            abnormal: 3 paraphrase 중 (id % 3)
+                            학습 샘플 수는 single 과 동일, 노출 paraphrase 만 다양화.
     """
     src = input_path if input_path else INPUT_PATH
     if not src.exists():
         print(f"[ERROR] {src} 없음. 먼저 scripts/build_dataset.py 실행 필요.")
         sys.exit(1)
 
+    assert paraphrase_mode in ("single", "round_robin"), \
+        f"paraphrase_mode invalid: {paraphrase_mode}"
+
     exclude_ids = exclude_ids or set()
     records = []
     skipped = 0
     excluded_count = 0
+    para_counts = {"summary": [0, 0, 0, 0], "abnormal": [0, 0, 0]}
 
     with open(src, encoding="utf-8") as f:
         for line in f:
@@ -274,12 +349,24 @@ def convert(
                 skipped += 1
                 continue
 
+            try:
+                id_int = int(str(row["id"]))
+            except (ValueError, TypeError):
+                id_int = abs(hash(str(row["id"])))
+
             # ── summary task ──────────────────────────────────────────
             if "summary" in tasks:
+                if paraphrase_mode == "round_robin":
+                    paras = _summary_response_all(meta)
+                    idx = id_int % len(paras)
+                    summary_value = paras[idx]
+                    para_counts["summary"][idx] += 1
+                else:
+                    summary_value = _summary_response(meta)
                 records.append({
                     "conversations": [
                         {"from": "human", "value": f"<image>\n{tasks['summary']}"},
-                        {"from": "gpt",   "value": _summary_response(meta)},
+                        {"from": "gpt",   "value": summary_value},
                     ],
                     "images": [image_path],
                 })
@@ -296,10 +383,17 @@ def convert(
 
             # ── abnormal task (오류 케이스만) ─────────────────────────
             if "abnormal" in tasks and not _is_normal(meta["error_code"]):
+                if paraphrase_mode == "round_robin":
+                    paras = _abnormal_response_all(meta)
+                    idx = id_int % len(paras)
+                    abnormal_value = paras[idx]
+                    para_counts["abnormal"][idx] += 1
+                else:
+                    abnormal_value = _abnormal_response(meta)
                 records.append({
                     "conversations": [
                         {"from": "human", "value": f"<image>\n{tasks['abnormal']}"},
-                        {"from": "gpt",   "value": _abnormal_response(meta)},
+                        {"from": "gpt",   "value": abnormal_value},
                     ],
                     "images": [image_path],
                 })
@@ -313,6 +407,9 @@ def convert(
         print(f"이미지 없음 스킵: {skipped}건")
     if excluded_count:
         print(f"평가셋 제외: {excluded_count}건 (held-out)")
+    if paraphrase_mode == "round_robin":
+        print(f"summary  paraphrase 분포 (id%4): {para_counts['summary']}")
+        print(f"abnormal paraphrase 분포 (id%3): {para_counts['abnormal']}")
 
 
 if __name__ == "__main__":
@@ -322,6 +419,9 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, help="출력 경로 (기본: vlm/data/livestock_train.json)")
     parser.add_argument("--exclude-eval-set", type=str,
                         help="평가셋 JSONL 경로 — 해당 도체번호들을 학습에서 제외")
+    parser.add_argument("--paraphrase-mode", type=str, default="single",
+                        choices=["single", "round_robin"],
+                        help="single (v4/v5 호환) | round_robin (v6 — id 결정적 paraphrase 다양화)")
     args = parser.parse_args()
 
     exclude_ids: set[str] = set()
@@ -333,4 +433,5 @@ if __name__ == "__main__":
 
     inp = Path(args.input) if args.input else None
     out = Path(args.output) if args.output else OUTPUT_PATH
-    convert(limit=args.limit, output_path=out, exclude_ids=exclude_ids, input_path=inp)
+    convert(limit=args.limit, output_path=out, exclude_ids=exclude_ids,
+            input_path=inp, paraphrase_mode=args.paraphrase_mode)

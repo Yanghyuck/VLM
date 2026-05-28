@@ -1,0 +1,73 @@
+### v6 — 데이터 측 paraphrase 다양화 (v5 결과 기반 방향 전환)
+###
+### v5 결과 회고:
+### - rank 32 + dropout 0.10 로 capacity 축소 → "권고/주의사항" 다양성은 회복 (권고 +424% vs v4)
+### - 그러나 "3문장_요약" 필드는 +3.7% (변화 미미), 합격기준 distinct_2 ≥ 0.28 미달 (0.2381)
+### - 결론: capacity 축소만으로는 reference 패턴 일관성을 못 깸 → 데이터 측 해결 필요
+###
+### v6 핵심 변경 (v4 → v6):
+### - 학습 데이터: livestock_train_v4.json → livestock_train_v6.json
+###   * convert_dataset.py 에 _summary_response_bullet, _summary_response_table 추가 (총 4 paraphrase)
+###   * round-robin 모드로 도체 ID 결정적 분포 (id % 4)
+###   * abnormal 도 기존 3 paraphrase 모두 활용 (id % 3, 기존엔 첫 번째만 사용)
+### - hyperparam: rank 64, dropout 0.05 (v4 와 동일 — capacity 축소 가설 v5 에서 부분 검증 완료)
+### - 학습 시간 v4 와 유사 (~6h) — 샘플 수 그대로 8,110, paraphrase 만 다양화
+###
+### 합격 기준 (v5 동일):
+### - ROUGE_L >= 0.85 (v2-corrected 수준 유지)
+### - distinct_2 >= 0.28 (baseline -10% 안)
+### - 추가 관찰: 필드별 distinct_2 모두 baseline 근처 회복
+
+### 모델
+model_name_or_path: Qwen/Qwen3-VL-8B-Instruct
+
+### 학습 방법
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 64                            # v4 동일 (v5 의 32 회귀 회피)
+lora_alpha: 128                          # alpha/rank=2
+lora_dropout: 0.05                       # v4 동일
+lora_target: all
+
+### Vision 학습 (v4/v5 와 동일)
+freeze_vision_tower: false
+freeze_multi_modal_projector: false
+
+### 데이터셋 (v6 — paraphrase 4종 round-robin)
+dataset: livestock_ko_v6
+dataset_dir: C:/Users/IPC/Desktop/git/LLaMA-Factory/data
+template: qwen3_vl_nothink
+cutoff_len: 1024
+max_samples: 30000
+overwrite_cache: true
+preprocessing_num_workers: 1
+
+### 출력 (v6 별도 디렉터리)
+output_dir: vlm/train/output/qwen3vl-lora-v6
+logging_steps: 10
+save_steps: 200
+save_total_limit: 3
+plot_loss: true
+overwrite_output_dir: true
+
+### 학습 하이퍼파라미터 (v4 와 동일)
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 32
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000
+dataloader_num_workers: 0
+
+### 검증
+val_size: 0.1
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 200
+
+### 이미지
+image_max_pixels: 100352
+video_max_pixels: 50176

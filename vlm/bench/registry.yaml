@@ -79,4 +79,9 @@ models:
   - label: lora_v5
     mode: lora
     adapter_path: vlm/train/output/qwen3vl-lora-v5
-    note: "v5 — 다양성 회복 가설 (rank 32, dropout 0.10), v4 데이터 그대로"
+    note: "v5 — 다양성 회복 가설 (rank 32, dropout 0.10), v4 데이터 그대로. 비채택."
+
+  - label: lora_v6
+    mode: lora
+    adapter_path: vlm/train/output/qwen3vl-lora-v6
+    note: "v6 — 데이터 측 paraphrase 4종 round-robin, rank 64 (v4 hyperparam)"
