@@ -701,16 +701,50 @@ curl -X POST http://localhost:8000/v1/report \
 
   **결론: v5 비채택, 운영 어댑터 v4 유지**
 
-#### v6 방향 (이번 결과로 결정)
-- capacity 측 천장 도달 확인. 다음은 **데이터 측 paraphrase 증강** 필수:
-  - `_summary_response` / `_summary_response_alt` 외에 새 paraphrase 함수 2-3개 추가 → references 4-5개로 늘리기
-  - 응답 형식 자체 다양화 (현재 거의 단일 양식, 불릿/문단 혼용 학습)
-- **abnormal 평가셋 별도 추출** — 현 held-out 50건은 모두 normal. abnormal 50건 별도면 진짜 환각/일반화 측정 가능
-- 그 외: DPO/선호 학습 (preference pair 라벨링 비용 부담)
+#### Phase 4 — v6 학습 (2026-05-28 ~ 2026-05-29)
+- [x] **B1 — paraphrase 함수 2개 추가** (`convert_dataset.py`)
+  - `_summary_response_bullet` (헤더 + 불릿 강조형)
+  - `_summary_response_table` (마크다운 표 + 한 줄 결론)
+  - `_summary_response_all` — 4 paraphrase 모음
+- [x] **B2 — convert() round-robin 모드**
+  - `paraphrase_mode="round_robin"` — 도체 ID % 4 (summary), id % 3 (abnormal)
+  - 학습 샘플 수 그대로 8,110 유지, 분포 균등 [949, 941, 960, 955] / [172, 154, 174]
+- [x] **B3 — v6 학습 완료** (2026-05-29 00:00 → 06:58, **6h 58m**)
+  - train_loss **0.173** (v4 0.160 대비 +8%, paraphrase 다양화 효과)
+  - eval_loss **0.085** (정상 일반화)
+  - rank 64 / dropout 0.05 (v4 hyperparam, capacity 변경 없음)
+- [x] **B4 — harness 8-way 검증** (2026-05-29 09:17)
+  - run dir: `runs/20260529T000018Z__c52c1db__lora_v6/`
+  - **합격기준 미달**: distinct_2 = 0.2430 (기준 ≥ 0.28, baseline -22.7%)
+  - ROUGE_L 0.9900 / BERT 0.9961 / 추론 19.97s (전 모델 최단)
+  - v5 대비 distinct_2 +2.1% 미미한 회복
 
-#### 사용 예 (v6 학습 완료 후 한 줄 회귀 판정)
+  **충격적 진단 — "3문장_요약" 필드 천장 발견:**
+  | 필드 | baseline | v4 | v5 (capacity↓) | v6 (data 4종) |
+  |---|---|---|---|---|
+  | 3문장_요약 | 0.3142 | 0.2296 | 0.2381 | **0.2430** |
+  | 권고 | 0.0659 | 0.0200 | **0.1048** ⭐ | 0.1000 |
+  | 주의사항 | 0.0000 | 0.4251 | **0.7042** ⭐ | 0.5610 |
+
+  "3문장_요약" 은 v4/v5/v6 모두 0.23-0.24 영역에서 거의 움직이지 않음. **capacity 축소 + 데이터 4종 다양화 모두 이 필드 천장을 못 깸**. 반면 "권고/주의사항" 은 두 방향 모두 큰 효과 (capacity↓ 가 더 강력).
+
+  **원인 가설**:
+  - 도체당 1 paraphrase round-robin → 모델은 "이 도체에는 이 표현" 학습 → 추론 시 동일 표현 반복
+  - LoRA rank 64 capacity 가 4 paraphrase 모두 외워 다양화 무력화
+
+  **결론: v6 비채택, 운영 어댑터 v4 유지**
+
+#### v7 방향 후보 (v6 결과로 좁혀짐)
+1. **abnormal 평가셋 추출** (즉시 실행 가능, 학습 X, **가장 ROI 높음**)
+   - 현 50건 held-out 모두 normal — abnormal eval 없이는 진짜 환각/일반화 측정 불가
+   - `vlm/bench/dataset.py build_eval_set_from_db()` 사용. abnormal 30 + normal 20 권장
+   - registry.yaml 의 `eval_set` 갱신 후 모든 모델 재평가 → "3문장_요약" 천장이 normal 한정인지 확인
+2. **도체당 모든 4 paraphrase 학습** (round-robin 폐기) — 학습 4배 ~24h
+3. **현재 천장을 데이터 본질 한계로 수용** — 합격기준을 실측에 맞게 (distinct_2 ≥ 0.24) 재조정, 운영 v4 그대로
+
+#### 사용 예 (다음 학습 후 한 줄 회귀 판정)
 ```
-python -m vlm.bench.harness run --models lora_v6
+python -m vlm.bench.harness run --models lora_v7
 python -m vlm.bench.harness score --check
 python -m vlm.bench.harness trend
 ```

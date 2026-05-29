@@ -15,6 +15,24 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 - `tests/test_eval_harness.py` — pytest 7건 (registry 파싱/필드/라벨 유일성/baseline 등록/메트릭 키 정합성/harness import/regression 자기-비교)
   - **실제 YAML 버그 자동 감지**: `grade_match_rate:{...}` colon-space 누락으로 키 일부로 파싱되던 회귀 임계치 버그를 pytest 가 잡아냄
 
+### Trained — v6 학습 완료 + 비채택 결정 + "3문장_요약" 천장 발견 (2026-05-29)
+- 학습 6h 58m (2026-05-29 00:00 → 06:58), 687/687 step / 3 epoch
+  - train_loss **0.173** (v4 0.160 대비 +8% — paraphrase 다양화 효과 확인)
+  - eval_loss **0.085** (정상 일반화, train_loss > eval_loss)
+  - 학습 데이터 livestock_train_v6.json (8,110건, paraphrase 분포 [949,941,960,955]/[172,154,174])
+- 8-way harness 평가 (`vlm/bench/runs/20260529T000018Z__c52c1db__lora_v6/`):
+  - ROUGE_L **0.9900** / BERT **0.9961** → reference 거의 완전 학습 (v3/v4/v5 와 동일 양상)
+  - distinct_2 **0.2430** (합격기준 0.28 미달, baseline -22.7%) → 회귀 자동 fail
+  - 추론 평균 **19.97s** (전 모델 최단)
+  - v5 대비 distinct_2 +2.1% 미미한 회복
+- **충격적 진단 — "3문장_요약" 필드 천장 발견**:
+  - 3문장_요약: v4 0.2296 → v5 0.2381 → v6 0.2430 (거의 정체)
+  - capacity 축소(v5) + 데이터 4종 다양화(v6) **두 방향 모두 이 필드 천장을 못 깸**
+  - "권고/주의사항" 은 두 방향 모두 큰 효과 (capacity↓ 가 더 강력: 권고 +424%)
+- **결론**: 도체당 1 paraphrase round-robin 학습 한계 명확. 모델이 "이 도체에는 이 표현" 외워 추론 시 같은 표현 반복
+- **v6 비채택, 운영 어댑터 v4 유지**
+- **v7 방향**: abnormal 평가셋 추출(가장 ROI), 도체당 모든 4종 학습(~24h), 또는 천장 수용
+
 ### Trained — v5 학습 완료 + 비채택 결정 (2026-05-28)
 - 학습 5h 49m (09:34 → 15:43), 687/687 step / 3 epoch
   - train_loss **0.180** (v4 0.160 대비 +12.5% — capacity 축소 효과 확인 ✓)
