@@ -52,6 +52,8 @@ from vlm.train.convert_dataset import (
     _abnormal_response,
     _abnormal_response_all,
     _is_normal,
+    VISUAL_DESC_PROMPT,
+    _visual_desc_response,
 )
 
 DATASET_JSONL = ROOT / CFG.paths.dataset_jsonl
@@ -113,8 +115,18 @@ def _build_tasks(meta: dict) -> dict:
     return tasks
 
 
-def build_eval_set(n: int = 50, seed: int = 42) -> list[dict]:
-    """dataset.jsonl 에서 결정적 추출 (in-distribution)."""
+def build_eval_set(n: int = 50, seed: int = 42, n_abnormal: int = 0,
+                   visual_desc_refs: dict[str, dict] | None = None) -> list[dict]:
+    """dataset.jsonl 에서 결정적 추출 (in-distribution).
+
+    Args:
+        n: 총 평가 샘플 수
+        seed: 랜덤 시드
+        n_abnormal: >0 이면 비정상 케이스를 그 수만큼 강제 포함(층화 추출).
+                    abnormal 평가 커버리지 확보용 (held-out 50건이 거의 normal 인 문제 해소).
+        visual_desc_refs: {id: {도체_전체_형태, 등지방층_외형}} 가 주어지면
+                          해당 도체의 eval 샘플에 visual_desc 태스크(prompt+reference) 부착.
+    """
     if not DATASET_JSONL.exists():
         raise FileNotFoundError(f"dataset.jsonl 없음: {DATASET_JSONL}. scripts/build_dataset.py 먼저 실행.")
 
@@ -124,17 +136,33 @@ def build_eval_set(n: int = 50, seed: int = 42) -> list[dict]:
             records.append(json.loads(line))
 
     rng = random.Random(seed)
-    selected = rng.sample(records, min(n, len(records)))
+    if n_abnormal > 0:
+        abn = [r for r in records if not _is_normal(r["metadata"]["error_code"])]
+        nrm = [r for r in records if _is_normal(r["metadata"]["error_code"])]
+        k_abn = min(n_abnormal, len(abn))
+        selected = rng.sample(abn, k_abn) + rng.sample(nrm, min(len(nrm), n - k_abn))
+        rng.shuffle(selected)
+    else:
+        selected = rng.sample(records, min(n, len(records)))
 
-    return [
-        {
+    out = []
+    for rec in selected:
+        tasks = _build_tasks(rec["metadata"])
+        if visual_desc_refs:
+            vd = visual_desc_refs.get(str(rec["id"]))
+            if vd:
+                tasks["visual_desc"] = {
+                    "prompt":      VISUAL_DESC_PROMPT,
+                    "reference":   _visual_desc_response(vd),
+                    "visual_desc": vd,
+                }
+        out.append({
             "id":         rec["id"],
             "image_path": rec["image_path"],
             "metadata":   rec["metadata"],
-            "tasks":      _build_tasks(rec["metadata"]),
-        }
-        for rec in selected
-    ]
+            "tasks":      tasks,
+        })
+    return out
 
 
 def _scan_images() -> dict[str, str]:
@@ -226,13 +254,28 @@ if __name__ == "__main__":
     parser.add_argument("--source", choices=["jsonl", "db"], default="jsonl")
     parser.add_argument("--n", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--n-abnormal", type=int, default=0,
+                        help="비정상 케이스를 그 수만큼 강제 포함 (jsonl 소스, abnormal 평가 커버리지)")
+    parser.add_argument("--visual-desc-refs", type=str,
+                        help="시각서술 증류 jsonl — eval 샘플에 visual_desc 태스크(prompt+reference) 부착")
     parser.add_argument("--output", type=str, default=str(ROOT / "vlm" / "bench" / "eval_set.jsonl"))
     args = parser.parse_args()
+
+    vd_refs = None
+    if args.visual_desc_refs:
+        vd_refs = {}
+        with open(args.visual_desc_refs, encoding="utf-8") as f:
+            for line in f:
+                rec = json.loads(line)
+                if rec.get("visual_desc"):
+                    vd_refs[str(rec["id"])] = rec["visual_desc"]
+        print(f"visual_desc reference 로드: {len(vd_refs)}건")
 
     if args.source == "db":
         samples = build_eval_set_from_db(n=args.n, seed=args.seed)
     else:
-        samples = build_eval_set(n=args.n, seed=args.seed)
+        samples = build_eval_set(n=args.n, seed=args.seed,
+                                 n_abnormal=args.n_abnormal, visual_desc_refs=vd_refs)
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -247,6 +290,9 @@ if __name__ == "__main__":
         g = s["metadata"]["grade"]
         grade_dist[g] = grade_dist.get(g, 0) + 1
 
+    n_vd = sum(1 for s in samples if "visual_desc" in s.get("tasks", {}))
     print(f"평가셋 생성 ({args.source}): {len(samples)}건 -> {out_path}")
     print(f"  정상/비정상: {n_normal} / {n_abnormal}")
     print(f"  등급 분포:   {grade_dist}")
+    if n_vd:
+        print(f"  visual_desc 부착: {n_vd}건")
