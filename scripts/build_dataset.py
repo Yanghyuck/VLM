@@ -87,20 +87,37 @@ def get_connection():
 
 
 def fetch_all_records() -> dict[tuple[str, str], dict]:
-    """(pigno_cnt, ymd) → 레코드. pigno_cnt 는 일자별로 재시작하므로 날짜까지 묶는다."""
+    """(pigno_cnt, ymd) → 레코드. pigno_cnt 는 일자별로 재시작하므로 날짜까지 묶는다.
+
+    tb_error 를 (pigno_cnt, ymd) 로 LEFT JOIN 하여 실제 error_code 6필드를 함께 가져온다.
+    tb_error 에 행이 없으면(LEFT JOIN NULL) 정상(0)으로 처리된다.
+    """
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT pigno_cnt, LEFT(date, 8) as ymd,
-               act_backfat_thk, act_centhk,
-               act_length, act_width, act_weight,
-               act_gender, act_grade
-        FROM tb_act_result
-        WHERE act_grade IS NOT NULL AND act_grade NOT IN ('', 'None')
+        SELECT a.pigno_cnt, LEFT(a.date, 8) AS ymd,
+               a.act_backfat_thk, a.act_centhk,
+               a.act_length, a.act_width, a.act_weight,
+               a.act_gender, a.act_grade,
+               e.pig_RightEntry, e.AI_Backbone_error, e.AI_BackFat_error,
+               e.AI_HalfBone_error, e.AI_multifidus_error, e.AI_Outline_error
+        FROM tb_act_result a
+        LEFT JOIN tb_error e
+               ON e.pigno_cnt = a.pigno_cnt
+              AND LEFT(e.date, 8) = LEFT(a.date, 8)
+        WHERE a.act_grade IS NOT NULL AND a.act_grade NOT IN ('', 'None')
     """)
     rows = cur.fetchall()
     conn.close()
     return {(str(r["pigno_cnt"]), str(r["ymd"])): r for r in rows}
+
+
+def _err_flag(v) -> int:
+    """tb_error 필드(float/None) → 0/1. NULL 이거나 0 이하면 0."""
+    try:
+        return 1 if v is not None and float(v) > 0 else 0
+    except (ValueError, TypeError):
+        return 0
 
 
 def scan_images() -> dict[tuple[str, str], str]:
@@ -127,9 +144,12 @@ def row_to_output(row: dict, image_path: str) -> ThemaPAOutput:
         gender=int(row.get("act_gender")                 or 1),
         grade=str(row.get("act_grade")                   or "등외"),
         error_code={
-            "pig_RightEntry": 0, "AI_Backbone_error": 0,
-            "AI_BackFat_error": 0, "AI_HalfBone_error": 0,
-            "AI_multifidus_error": 0, "AI_Outline_error": 0,
+            "pig_RightEntry":      _err_flag(row.get("pig_RightEntry")),
+            "AI_Backbone_error":   _err_flag(row.get("AI_Backbone_error")),
+            "AI_BackFat_error":    _err_flag(row.get("AI_BackFat_error")),
+            "AI_HalfBone_error":   _err_flag(row.get("AI_HalfBone_error")),
+            "AI_multifidus_error": _err_flag(row.get("AI_multifidus_error")),
+            "AI_Outline_error":    _err_flag(row.get("AI_Outline_error")),
         },
         backbone_slope={"has_large_slope": False, "threshold": None},
         result_image_path=image_path,

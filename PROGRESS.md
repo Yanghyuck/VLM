@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-06-01 (v7 데이터 확대 재학습 착수 — dataset 3,816 → 10,852, 학습 21,604 샘플)
+**최종 업데이트**: 2026-06-01 (tb_error 실오류 통합 + 시각서술 visual_desc 태스크 신설·전량 증류 진행 중)
 **현재 브랜치**: `main` (default), `local-vlm-train` (개발 — 모든 신규 커밋·푸시 대상)
 **리포지토리**: https://github.com/Yanghyuck/VLM
 **릴리스**: [`v1.2.0`](https://github.com/Yanghyuck/VLM/tree/v1.2.0) (v4 어댑터 — 검출 실패 환각 근본 해결)
@@ -784,7 +784,38 @@ python -m vlm.bench.harness trend
     주는 효과 확인 예정 (천장이 데이터 양 문제인지 reference 패턴 문제인지 분리)
 
 > 참고: 이번 v7은 위 "v7 방향 후보"의 paraphrase 실험과 별개인 **데이터 규모 확대** 트랙.
-> abnormal 평가셋 추출(후보 1)은 아직 미완 — 현 held-out 50건은 여전히 전부 normal.
+
+#### Phase 6 — 실제 error_code(tb_error) 통합 (2026-06-01)
+
+기존 `build_dataset.py`/`dataset.py`는 `error_code`를 전부 0(정상)으로 **하드코딩**해
+abnormal 태스크가 합성 데이터(v4 500건)에만 의존했음. 운영자가 `tb_error` 테이블에
+실제 검출 오류를 채워넣어, DB 기반 실오류를 학습/평가에 반영.
+
+- [x] **tb_error 검증** — 10,856행(5/27~5/29), dataset 와 `(pigno_cnt, ymd)` **100% 매칭**(누락 0)
+  - 비정상 344건: AI_HalfBone 248 / multifidus 103 / RightEntry 18 / Backbone 5 / Outline 5 / BackFat 3
+- [x] **build_dataset.py 수정** — `tb_act_result ⨝ tb_error` LEFT JOIN 으로 실제 error_code 6필드
+  채움(`_err_flag` 헬퍼, NULL→0). 하드코딩 제거.
+- [x] **재생성** — dataset.jsonl 비정상 344건 반영 / eval_set.jsonl **정상 48 + 비정상 2**(기존 0)
+  / livestock_train.json **21,946 샘플**(summary 10,802 + grade 10,802 + **abnormal 342**)
+  - 학습∩평가 이미지 = 0 (누수 없음)
+  - → "held-out 50건 전부 normal" 문제 일부 해소(2건 포함). 추후 abnormal 가중 평가셋 별도 구성 검토.
+
+#### Phase 7 — 시각 서술(visual_desc) 태스크 신설 + 증류 (2026-06-01, 진행 중)
+
+기존 추론은 측정값을 텍스트로 받아 리포트로 옮겨쓰는 구조(이미지는 grounding 만).
+"이미지를 보고 추론"하는 신규 태스크로 **시각 서술**(도체 전체 형태 + 등지방층 외형) 추가.
+
+- [x] 이미지 실체 확인 — thema_pa AI 이미지는 반도체 단면 + 척추 분절/등지방 측정값 오버레이.
+  **측정 숫자가 그려져 있어** 서술 타깃에서 수치 낭독을 배제하고 정성 특징(형태·색·균일도·경계)만.
+- [x] 프롬프트 `vlm/prompt/visual_desc.txt` — 2필드 JSON, 수치 낭독 금지, '~습니다' 통일.
+- [x] 증류 스크립트 `scripts/distill_visual_desc.py` — teacher=로컬 base Qwen3-VL,
+  sampling(temp 0.8) + 비정상 케이스 error 힌트 주입(teacher 전용, 학습 입력엔 미포함) + resume.
+- [x] **파일럿 50장 3회 반복으로 품질 수렴** (v1 greedy → v2 sampling+힌트 → v3 +문체통일)
+  - v1: 천편일률·비정상을 정상으로 서술(모순) → v2: 다양성↑·error 반영 → v3: 문체 '~습니다' 통일까지
+  - 검증: JSON 파싱 OK, 수치 비낭독, 비정상(HalfBone/RightEntry) 오류 정확 반영
+- [~] **전량 10,852장 증류 진행 중** → `vlm/data/visual_desc_refs.jsonl` (~24~28h, 실측 ~8~9s/건)
+- [ ] (완료 후) build_dataset/convert_dataset 에 visual_desc 태스크 통합 → 학습셋 추가 → 학습
+- [ ] (완료 후) 시각서술 평가 지표(항목 커버리지·DB 정합성·ROUGE/BERT)
 
 ### 우선순위 1 — 5주차 마무리 ✅ (이번 세션 완료)
 - [x] **C1**: `CHANGELOG.md` `[v1.1.0]` 섹션 추가 (5주차 + E2E + warm-up + numpy 핀)
