@@ -101,6 +101,18 @@ ERROR_LABEL = {
 }
 
 
+# visual_desc — 이미지 기반 시각 서술 태스크 (도체 전체 형태 + 등지방층 외형).
+# reference 는 scripts/distill_visual_desc.py 가 생성한 별도 파일에서 주입된다.
+VISUAL_DESC_PROMPT = "이 도체 이미지를 보고 도체 전체 형태와 등지방층 외형을 시각적으로 서술해주세요."
+
+
+def _visual_desc_response(vd: dict) -> str:
+    """증류된 2필드 dict → 학습 타깃 텍스트 (라벨 2섹션)."""
+    form    = (vd.get("도체_전체_형태") or "").strip()
+    backfat = (vd.get("등지방층_외형") or "").strip()
+    return f"도체 전체 형태: {form}\n등지방층 외형: {backfat}"
+
+
 def _summary_response(meta: dict) -> str:
     gender = GENDER_MAP.get(meta["gender"], "미상")
     grade  = meta["grade"]
@@ -302,6 +314,7 @@ def convert(
     exclude_ids: set[str] | None = None,
     input_path: Path | None = None,
     paraphrase_mode: str = "single",
+    visual_desc_refs: dict[str, dict] | None = None,
 ) -> None:
     """dataset.jsonl 을 ShareGPT 학습 JSON 으로 변환.
 
@@ -330,6 +343,7 @@ def convert(
     records = []
     skipped = 0
     excluded_count = 0
+    visual_desc_count = 0
     para_counts = {"summary": [0, 0, 0, 0], "abnormal": [0, 0, 0]}
 
     with open(src, encoding="utf-8") as f:
@@ -398,6 +412,19 @@ def convert(
                     "images": [image_path],
                 })
 
+            # ── visual_desc task (증류 reference 가 있는 레코드만) ──────
+            if visual_desc_refs:
+                vd = visual_desc_refs.get(str(row["id"]))
+                if vd:
+                    records.append({
+                        "conversations": [
+                            {"from": "human", "value": f"<image>\n{VISUAL_DESC_PROMPT}"},
+                            {"from": "gpt",   "value": _visual_desc_response(vd)},
+                        ],
+                        "images": [image_path],
+                    })
+                    visual_desc_count += 1
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
@@ -407,6 +434,8 @@ def convert(
         print(f"이미지 없음 스킵: {skipped}건")
     if excluded_count:
         print(f"평가셋 제외: {excluded_count}건 (held-out)")
+    if visual_desc_count:
+        print(f"visual_desc 샘플: {visual_desc_count}건 (증류 reference 매칭)")
     if paraphrase_mode == "round_robin":
         print(f"summary  paraphrase 분포 (id%4): {para_counts['summary']}")
         print(f"abnormal paraphrase 분포 (id%3): {para_counts['abnormal']}")
@@ -422,6 +451,8 @@ if __name__ == "__main__":
     parser.add_argument("--paraphrase-mode", type=str, default="single",
                         choices=["single", "round_robin"],
                         help="single (v4/v5 호환) | round_robin (v6 — id 결정적 paraphrase 다양화)")
+    parser.add_argument("--visual-desc-refs", type=str,
+                        help="시각서술 증류 jsonl (distill_visual_desc.py 산출) — visual_desc 태스크 추가")
     args = parser.parse_args()
 
     exclude_ids: set[str] = set()
@@ -431,7 +462,18 @@ if __name__ == "__main__":
                 exclude_ids.add(str(json.loads(line)["id"]))
         print(f"제외할 평가셋 ID 로드: {len(exclude_ids)}건")
 
+    vd_refs: dict[str, dict] | None = None
+    if args.visual_desc_refs:
+        vd_refs = {}
+        with open(args.visual_desc_refs, encoding="utf-8") as f:
+            for line in f:
+                rec = json.loads(line)
+                if rec.get("visual_desc"):   # 파싱 성공한 것만
+                    vd_refs[str(rec["id"])] = rec["visual_desc"]
+        print(f"visual_desc reference 로드: {len(vd_refs)}건")
+
     inp = Path(args.input) if args.input else None
     out = Path(args.output) if args.output else OUTPUT_PATH
     convert(limit=args.limit, output_path=out, exclude_ids=exclude_ids,
-            input_path=inp, paraphrase_mode=args.paraphrase_mode)
+            input_path=inp, paraphrase_mode=args.paraphrase_mode,
+            visual_desc_refs=vd_refs)
