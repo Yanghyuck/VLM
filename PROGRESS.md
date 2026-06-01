@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-05-19 (v1.2.0 GitHub Release 게시)
+**최종 업데이트**: 2026-06-01 (v7 데이터 확대 재학습 착수 — dataset 3,816 → 10,852, 학습 21,604 샘플)
 **현재 브랜치**: `main` (default), `local-vlm-train` (개발 — 모든 신규 커밋·푸시 대상)
 **리포지토리**: https://github.com/Yanghyuck/VLM
 **릴리스**: [`v1.2.0`](https://github.com/Yanghyuck/VLM/tree/v1.2.0) (v4 어댑터 — 검출 실패 환각 근본 해결)
@@ -748,6 +748,43 @@ python -m vlm.bench.harness run --models lora_v7
 python -m vlm.bench.harness score --check
 python -m vlm.bench.harness trend
 ```
+
+#### Phase 5 — v7 데이터 확대 재학습 (2026-06-01, 진행 중)
+
+운영자가 학습용 AI 이미지·DB 레코드를 대량 추가 → 데이터 파이프라인 점검 중
+**날짜 매칭 누락 버그**를 발견·수정하고 전량으로 재학습 착수.
+
+- [x] **데이터 추가 확인**
+  - AI 이미지 폴더(`thema_pa_VLM/images/AI`): 파일 10,874개 중 AI 패턴 매칭 **10,852장**
+  - DB(`ai_grade_judg_dvlp.tb_act_result`): 14,345행, 유효 등급 `(pigno_cnt, ymd)` distinct 14,210
+  - 이미지 전량이 DB와 매칭(고아 0건) — **추가 DB 데이터 불필요**, 병목은 이미지 쪽
+- [x] **매칭 키 버그 수정** (`scripts/build_dataset.py`, 커밋 `07a34c4`)
+  - `pigno_cnt`(도체번호)는 도축일자별 1부터 재시작 → 번호만으로 매칭 시 다른 날짜 건이 충돌해
+    마지막 1건만 생존(10,852장 중 ~7,000장 유실, dataset 3,816건에 고정돼 있던 원인)
+  - DB·이미지 매칭 키를 **`(pigno_cnt, ymd)`** 조합으로 변경, 파일명 datetime 그룹 캡처
+  - 등급 필터 `NOT IN ('', 'None')` 강화 (문자열 `None` 134건 차단)
+  - record `id` → `{ymd}{도체번호}` (전역 유일·정수 파싱 가능, round-robin 회전 유지).
+    실제 번호는 `metadata.carcass_no` 보존
+- [x] **dataset.jsonl 재생성: 3,816 → 10,852건** (1+ 5,076 / 1 3,665 / 2 2,111)
+- [x] **평가셋 재생성** (`vlm/bench/dataset.py --source jsonl --n 50 --seed 42`)
+  - 50건 held-out, 새 id 형식 + `thema_pa_VLM` 경로 (기존엔 옛 `thema_pa` 경로·옛 id였음)
+  - 등급 1+ 24 / 1 18 / 2 8, 전부 정상(abnormal 0)
+- [x] **학습셋 재변환** (`convert_dataset.py --exclude-eval-set --paraphrase-mode round_robin`)
+  - 평가셋 50건 정상 제외 → **livestock_train.json 21,604 샘플** (10,802 도체 × summary+grade)
+  - summary paraphrase 분포 [2697, 2699, 2707, 2699], abnormal 0 (error_code 전부 정상)
+  - **학습 이미지 ∩ 평가 이미지 = 0 (누수 없음 검증)**
+  - LLaMA-Factory data 디렉터리 복사(`livestock_ko`, 14.3MB)
+- [x] **v7 학습 설정 생성** (`vlm/train/qwen3vl_lora_v7.yaml`)
+  - 데이터: `livestock_ko`(= 새 21,604 샘플), 출력 `vlm/train/output/qwen3vl-lora-v7`
+  - 하이퍼파라미터는 v6과 100% 동일 (rank 64 / alpha 128 / dropout 0.05, Vision 학습 on)
+- [~] **v7 학습 진행 중** (2026-06-01 ~20:50 착수)
+  - 데이터 로드 21,604 정상 확인 → `val_size 0.1` 분할 train **19,443** / val **2,161**
+  - ETA 약 14~16h (v6 8,110샘플 ~7h 기준 ~2.4배), 로그 `vlm/train/train_v7.log`
+  - 완료 후: harness `--models lora_v7` 8-way 평가 → 데이터 3배 확대가 "3문장_요약" 천장에
+    주는 효과 확인 예정 (천장이 데이터 양 문제인지 reference 패턴 문제인지 분리)
+
+> 참고: 이번 v7은 위 "v7 방향 후보"의 paraphrase 실험과 별개인 **데이터 규모 확대** 트랙.
+> abnormal 평가셋 추출(후보 1)은 아직 미완 — 현 held-out 50건은 여전히 전부 normal.
 
 ### 우선순위 1 — 5주차 마무리 ✅ (이번 세션 완료)
 - [x] **C1**: `CHANGELOG.md` `[v1.1.0]` 섹션 추가 (5주차 + E2E + warm-up + numpy 핀)
