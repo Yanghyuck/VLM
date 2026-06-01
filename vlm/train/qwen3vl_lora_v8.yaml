@@ -1,0 +1,68 @@
+### v8 — visual_desc(시각 서술) 태스크 추가 학습
+###
+### v7 → v8 변경:
+### - 데이터에 visual_desc 태스크 추가 (이미지 기반 "도체 전체 형태 + 등지방층 외형" 시각 서술)
+###   * reference 는 base Qwen3-VL 증류 산출(vlm/data/visual_desc_refs.jsonl)
+###   * 기존 summary/grade/abnormal + visual_desc → 학습 샘플 ~21,946 → ~32,800
+### - tb_error 실오류 반영(abnormal 344건)도 포함 (v7 과 동일 데이터 기반)
+### - hyperparam: v6/v7 와 동일 (rank 64 / alpha 128 / dropout 0.05, Vision 학습 on)
+### - 출력 디렉터리만 v8 로 분리
+###
+### 데이터 준비 (학습 전):
+###   python vlm/train/convert_dataset.py --exclude-eval-set vlm/bench/eval_set.jsonl \
+###       --paraphrase-mode round_robin --visual-desc-refs vlm/data/visual_desc_refs.jsonl
+###   → livestock_train.json (= dataset livestock_ko) 재생성 + LF data 디렉터리 복사
+
+### 모델
+model_name_or_path: Qwen/Qwen3-VL-8B-Instruct
+
+### 학습 방법
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target: all
+
+### Vision 학습
+freeze_vision_tower: false
+freeze_multi_modal_projector: false
+
+### 데이터셋 (v8 — visual_desc 포함 ~32.8k 샘플)
+dataset: livestock_ko
+dataset_dir: C:/Users/IPC/Desktop/git/LLaMA-Factory/data
+template: qwen3_vl_nothink
+cutoff_len: 1024
+max_samples: 40000                       # ~32.8k 전량 사용 (truncate 방지)
+overwrite_cache: true
+preprocessing_num_workers: 1
+
+### 출력 (v8 별도 디렉터리)
+output_dir: vlm/train/output/qwen3vl-lora-v8
+logging_steps: 10
+save_steps: 200
+save_total_limit: 3
+plot_loss: true
+overwrite_output_dir: true
+
+### 학습 하이퍼파라미터 (v6/v7 와 동일)
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 32
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000
+dataloader_num_workers: 0
+
+### 검증
+val_size: 0.1
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 200
+
+### 이미지
+image_max_pixels: 100352
+video_max_pixels: 50176
