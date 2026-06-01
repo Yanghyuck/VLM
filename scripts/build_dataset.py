@@ -62,9 +62,10 @@ OUTPUT_PATH = os.path.join(ROOT, CFG.paths.dataset_jsonl)
 
 # AI 이미지: 0716_ai_{datetime}_{pigno}_{pigno+offset}_SP_CAM7.jpg
 # ORI 이미지: 0716_ori_{datetime}_{pigno}_SP_CAM7.jpg
-# 첫 번째 숫자가 pigno_cnt
-FILENAME_RE_AI  = re.compile(r"^.+_ai_\d+_(\d+)_\d+_.+\.jpg$",  re.IGNORECASE)
-FILENAME_RE_ORI = re.compile(r"^.+_ori_\d+_(\d+)_.+\.jpg$",     re.IGNORECASE)
+# group(1)=datetime(앞 8자리가 ymd), group(2)=pigno_cnt
+# pigno_cnt 는 매일 1부터 재시작하므로 (pigno_cnt, ymd) 조합으로 매칭해야 한다.
+FILENAME_RE_AI  = re.compile(r"^.+_ai_(\d+)_(\d+)_\d+_.+\.jpg$",  re.IGNORECASE)
+FILENAME_RE_ORI = re.compile(r"^.+_ori_(\d+)_(\d+)_.+\.jpg$",     re.IGNORECASE)
 # image_dir 의 모드를 자동 판별 (폴더명으로 AI/ORI 구분)
 FILENAME_RE = FILENAME_RE_AI if "AI" in IMAGE_DIR.upper() else FILENAME_RE_ORI
 
@@ -85,7 +86,8 @@ def get_connection():
     )
 
 
-def fetch_all_records() -> dict[str, dict]:
+def fetch_all_records() -> dict[tuple[str, str], dict]:
+    """(pigno_cnt, ymd) → 레코드. pigno_cnt 는 일자별로 재시작하므로 날짜까지 묶는다."""
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
     cur.execute("""
@@ -94,20 +96,22 @@ def fetch_all_records() -> dict[str, dict]:
                act_length, act_width, act_weight,
                act_gender, act_grade
         FROM tb_act_result
-        WHERE act_grade IS NOT NULL AND act_grade != ''
+        WHERE act_grade IS NOT NULL AND act_grade NOT IN ('', 'None')
     """)
     rows = cur.fetchall()
     conn.close()
-    return {str(r["pigno_cnt"]): r for r in rows}
+    return {(str(r["pigno_cnt"]), str(r["ymd"])): r for r in rows}
 
 
-def scan_images() -> dict[str, str]:
+def scan_images() -> dict[tuple[str, str], str]:
+    """(pigno_cnt, ymd) → 이미지 경로."""
     result = {}
     for fname in os.listdir(IMAGE_DIR):
         m = FILENAME_RE.match(fname)
         if m:
-            pigno = m.group(1).lstrip("0") or "0"
-            result[pigno] = os.path.join(IMAGE_DIR, fname)
+            ymd = m.group(1)[:8]
+            pigno = m.group(2).lstrip("0") or "0"
+            result[(pigno, ymd)] = os.path.join(IMAGE_DIR, fname)
     return result
 
 
@@ -141,7 +145,8 @@ def build(limit: int | None = None):
     image_map = scan_images()
     print(f"  이미지: {len(image_map)}장")
 
-    matched_keys = sorted(set(db_records) & set(image_map), key=lambda x: int(x))
+    matched_keys = sorted(set(db_records) & set(image_map),
+                          key=lambda k: (k[1], int(k[0])))  # (ymd, pigno_cnt)
     if limit:
         matched_keys = matched_keys[:limit]
 
@@ -154,12 +159,13 @@ def build(limit: int | None = None):
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         for key in matched_keys:
+            pigno, ymd = key
             row = db_records[key]
             img_path = image_map[key]
             try:
                 output = row_to_output(row, img_path)
             except Exception as e:
-                print(f"  [SKIP] pigno={key}: {e}")
+                print(f"  [SKIP] pigno={pigno} ymd={ymd}: {e}")
                 continue
 
             grade_count[output.grade] = grade_count.get(output.grade, 0) + 1
@@ -168,8 +174,10 @@ def build(limit: int | None = None):
             if not output.error_code.is_normal():
                 tasks.append("abnormal")
 
+            # pigno_cnt 는 일자별 재시작 → (ymd+pigno) 로 전역 유일 ID. 정수 파싱 가능해
+            # convert_dataset 의 결정적 paraphrase 회전(id_int % N)도 그대로 동작한다.
             record = {
-                "id":         str(output.carcass_no),
+                "id":         f"{ymd}{output.carcass_no}",
                 "image_path": img_path,
                 "metadata":   output.model_dump(),
                 "summary":    output.summary(),
