@@ -320,6 +320,7 @@ def generate_report(
             parsed,
             expected_grade=output.grade,
             expected_gender=output.gender.label(),
+            expected_error_code=output.error_code.model_dump(),
         )
     return parsed
 

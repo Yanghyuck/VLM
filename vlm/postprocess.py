@@ -124,6 +124,75 @@ def detect_gender_conflict(text: str, expected_gender: str) -> bool:
     return any(g in text for g in others)
 
 
+# F — error_code 충실도(grounding)
+# `비정상_근거` 가 입력 error_code 에 없는 검출오류를 끼워넣는 환각(v8 스모크에서
+# backfat_error 가 입력에 없던 pig_RightEntry 를 언급) 차단.
+# 입력에 없는 코드(extra)가 탐지되면 비정상_근거 를 입력 기준으로 재작성(A4 등급
+# 강제와 동일 철학). 누락(missing)은 메타로만 기록(과교정 방지).
+ERROR_CODE_REASON: dict[str, str] = {
+    "pig_RightEntry":      "비정상 진입",
+    "AI_Backbone_error":   "척추 검출 실패",
+    "AI_BackFat_error":    "등지방 검출 실패",
+    "AI_HalfBone_error":   "반골 검출 실패",
+    "AI_multifidus_error": "뭇갈래근 검출 실패",
+    "AI_Outline_error":    "윤곽선 검출 실패",
+}
+
+# 코드별 표면형 — raw 코드 토큰(모델이 괄호로 노출) + 한글 라벨(검출 오류 문맥).
+_ERROR_CODE_SURFACE: dict[str, re.Pattern[str]] = {
+    "pig_RightEntry":      re.compile(r"pig_RightEntry|비정상\s*진입"),
+    "AI_Backbone_error":   re.compile(r"AI_Backbone_error|척추\s*검출"),
+    "AI_BackFat_error":    re.compile(r"AI_BackFat_error|등지방\s*검출"),
+    "AI_HalfBone_error":   re.compile(r"AI_HalfBone_error|반골\s*검출"),
+    "AI_multifidus_error": re.compile(r"AI_multifidus_error|뭇갈래근\s*검출"),
+    "AI_Outline_error":    re.compile(r"AI_Outline_error|윤곽선\s*검출"),
+}
+
+
+def extract_error_codes(text: str) -> set[str]:
+    """텍스트가 (검출오류로) 언급하는 error_code 키 집합. F·B 공용."""
+    t = text or ""
+    return {code for code, pat in _ERROR_CODE_SURFACE.items() if pat.search(t)}
+
+
+def build_grounded_reason(codes: list[str]) -> str:
+    """입력 error_code 키 목록 → 결정적 비정상_근거 문장."""
+    labels = [ERROR_CODE_REASON[c] for c in codes if c in ERROR_CODE_REASON]
+    if not labels:
+        return "검출 오류가 확인되어 등급 판정 근거 측정값의 정확성을 보장할 수 없습니다."
+    joined = ", ".join(labels)
+    return f"{joined}가 확인되어 등급 판정 근거 측정값의 정확성을 보장할 수 없습니다."
+
+
+def faithfulness(detected: set[str], expected: set[str]) -> tuple[set[str], set[str]]:
+    """(extra=입력에 없는데 언급, missing=입력에 있는데 누락) 반환. B 메트릭 공용."""
+    return detected - expected, expected - detected
+
+
+def enforce_error_code_grounding(
+    report: dict, expected_error_code: dict[str, int],
+) -> tuple[dict, dict]:
+    """F. `비정상_근거` 에 입력에 없는 코드가 있으면 입력 기준으로 재작성.
+
+    Returns: (report, info) — info 는 extra/missing/rewritten 기록(없으면 빈 dict).
+    """
+    reason = report.get("비정상_근거")
+    if not isinstance(reason, str) or not reason.strip():
+        return report, {}                       # 정상 케이스(근거 null) → 검사 안 함
+    expected = {c for c, v in (expected_error_code or {}).items() if v}
+    detected = extract_error_codes(reason)
+    extra, missing = faithfulness(detected, expected)
+    info: dict[str, Any] = {}
+    if extra:
+        report = dict(report)
+        report["비정상_근거"] = build_grounded_reason(sorted(expected))
+        info["error_code_extra"] = sorted(extra)
+        info["error_code_rewritten"] = True
+    if missing:
+        info["error_code_missing"] = sorted(missing)
+    return report, info
+
+
 def _walk(obj: Any, fn: Callable[[str], tuple[str, bool]]) -> tuple[Any, bool]:
     """dict/list/str 트리의 모든 문자열에 fn 적용. 변경 누적."""
     if isinstance(obj, str):
@@ -151,13 +220,15 @@ def apply_postprocess(
     report: dict,
     expected_grade: str | None = None,
     expected_gender: str | None = None,
+    expected_error_code: dict[str, int] | None = None,
 ) -> dict:
-    """LoRA 응답 dict 에 A3 + A4 + A5 후처리를 일괄 적용.
+    """LoRA 응답 dict 에 A3 + A4 + A5 + F 후처리를 일괄 적용.
 
     Args:
         report: generate_report() 출력 (예: 4 필드 dict)
         expected_grade: 입력 ThemaPAOutput.grade — A4 적용 대상. None 이면 A3 만.
         expected_gender: 입력 성별 라벨("암컷"/"수컷"/"거세") — A5 적용 대상.
+        expected_error_code: 입력 error_code dict({code:0/1}) — F(근거 grounding) 적용 대상.
 
     Returns:
         후처리된 dict. 변경/검출 발생 시 '_postprocess' 메타필드 기록.
@@ -188,7 +259,11 @@ def apply_postprocess(
             return False
         gender_conflict = conflict_walk(new_report)
 
-    if josa_changed or grade_changed or gender_changed or gender_conflict:
+    ec_info: dict[str, Any] = {}
+    if expected_error_code is not None:
+        new_report, ec_info = enforce_error_code_grounding(new_report, expected_error_code)
+
+    if josa_changed or grade_changed or gender_changed or gender_conflict or ec_info:
         meta = dict(new_report.get("_postprocess", {}))
         if josa_changed:
             meta["josa_normalized"] = True
@@ -198,6 +273,7 @@ def apply_postprocess(
             meta["gender_enforced"] = True
         if gender_conflict:
             meta["gender_conflict_detected"] = True
+        meta.update(ec_info)
         new_report["_postprocess"] = meta
 
     return new_report

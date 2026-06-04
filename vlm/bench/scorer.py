@@ -112,6 +112,33 @@ def compute_rouge_l_max(pred_text: str, ref_texts: list[str]) -> float:
     return max(scores) if scores else -1.0
 
 
+def error_code_faithfulness(pairs: list[tuple[set, set]]) -> dict:
+    """B — abnormal 케이스의 error_code 충실도.
+
+    pairs: [(detected, expected)] (각 set[str]). detected=비정상_근거가 언급한 코드,
+    expected=입력 error_code(값1) 코드.
+    - exact_match_rate: extra·missing 둘 다 없는(정확 일치) 비율
+    - extra_rate: 입력에 없는 코드를 끼워넣은(환각) 케이스 비율  ← 핵심 약점 지표
+    - missing_rate: 입력 코드를 누락한 케이스 비율
+    """
+    from vlm.postprocess import faithfulness
+    n = len(pairs)
+    if n == 0:
+        return {"n": 0}
+    exact = extra = missing = 0
+    for det, exp in pairs:
+        e, m = faithfulness(set(det), set(exp))
+        exact += int(not e and not m)
+        extra += int(bool(e))
+        missing += int(bool(m))
+    return {
+        "n": n,
+        "exact_match_rate": exact / n,
+        "extra_rate": extra / n,
+        "missing_rate": missing / n,
+    }
+
+
 def compute_distinct_n(texts: list[str], n: int) -> float:
     """A4 — distinct-N: 응답 모음의 unique n-gram / total n-gram (0~1)."""
     all_ngrams: list[str] = []

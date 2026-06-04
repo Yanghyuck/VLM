@@ -8,11 +8,16 @@ import pytest
 
 from vlm.postprocess import (
     apply_postprocess,
+    build_grounded_reason,
     detect_gender_conflict,
+    enforce_error_code_grounding,
     enforce_gender,
     enforce_grade,
+    extract_error_codes,
+    faithfulness,
     normalize_josa,
 )
+from vlm.bench.scorer import error_code_faithfulness
 
 
 # ---------------------------------------------------------------------------
@@ -261,3 +266,91 @@ class TestApplyPostprocess:
         assert result["비정상_근거"] is None
         assert result["주의사항"] == []
         assert result["model_used"] == "lora"
+
+
+# ---------------------------------------------------------------------------
+# F — error_code 충실도(grounding)
+# ---------------------------------------------------------------------------
+
+class TestExtractErrorCodes:
+    def test_raw_코드_탐지(self):
+        assert extract_error_codes("비정상 진입(pig_RightEntry) 및 등지방 검출 실패") == {
+            "pig_RightEntry", "AI_BackFat_error"
+        }
+
+    def test_한글_라벨_탐지(self):
+        assert extract_error_codes("반골 검출 실패로 인해") == {"AI_HalfBone_error"}
+
+    def test_정상_텍스트는_빈집합(self):
+        assert extract_error_codes("모든 AI 검출이 정상 완료되었습니다.") == set()
+
+
+class TestFaithfulness:
+    def test_extra_missing_분리(self):
+        extra, missing = faithfulness({"AI_Outline_error", "AI_HalfBone_error"},
+                                      {"AI_HalfBone_error"})
+        assert extra == {"AI_Outline_error"}
+        assert missing == set()
+
+    def test_정확_일치(self):
+        extra, missing = faithfulness({"AI_HalfBone_error"}, {"AI_HalfBone_error"})
+        assert not extra and not missing
+
+
+class TestEnforceErrorCodeGrounding:
+    def test_환각_코드_재작성(self):
+        report = {"비정상_근거": "반골 검출 실패 및 윤곽선 검출 오류로 신뢰도 저하"}
+        ec = {"AI_HalfBone_error": 1, "AI_Outline_error": 0}
+        out, info = enforce_error_code_grounding(report, ec)
+        assert "윤곽선" not in out["비정상_근거"]
+        assert "반골 검출 실패" in out["비정상_근거"]
+        assert info["error_code_extra"] == ["AI_Outline_error"]
+        assert info["error_code_rewritten"] is True
+
+    def test_충실한_근거는_무변경(self):
+        report = {"비정상_근거": "반골 검출 실패로 인해 신뢰도 저하"}
+        ec = {"AI_HalfBone_error": 1}
+        out, info = enforce_error_code_grounding(report, ec)
+        assert out["비정상_근거"] == report["비정상_근거"]
+        assert "error_code_rewritten" not in info
+
+    def test_정상_케이스_null_은_검사_안함(self):
+        report = {"비정상_근거": None}
+        out, info = enforce_error_code_grounding(report, {k: 0 for k in
+            ["pig_RightEntry", "AI_HalfBone_error"]})
+        assert out["비정상_근거"] is None
+        assert info == {}
+
+    def test_apply_postprocess_통합(self):
+        report = {"3문장_요약": "등외", "비정상_근거": "비정상 진입(pig_RightEntry) 으로 신뢰도 저하"}
+        ec = {"AI_BackFat_error": 1, "pig_RightEntry": 0}
+        out = apply_postprocess(report, expected_grade="등외",
+                                expected_error_code=ec)
+        assert "pig_RightEntry" not in out["비정상_근거"]
+        assert "등지방 검출 실패" in out["비정상_근거"]
+        assert out["_postprocess"]["error_code_rewritten"] is True
+
+    def test_build_grounded_reason(self):
+        s = build_grounded_reason(["AI_HalfBone_error", "AI_BackFat_error"])
+        assert "반골 검출 실패" in s and "등지방 검출 실패" in s
+
+
+# ---------------------------------------------------------------------------
+# B — error_code 충실도 메트릭
+# ---------------------------------------------------------------------------
+
+class TestErrorCodeFaithfulnessMetric:
+    def test_빈_입력(self):
+        assert error_code_faithfulness([])["n"] == 0
+
+    def test_혼합_집계(self):
+        pairs = [
+            ({"AI_HalfBone_error"}, {"AI_HalfBone_error"}),                  # 정확
+            ({"AI_HalfBone_error", "AI_Outline_error"}, {"AI_HalfBone_error"}),  # extra
+            (set(), {"AI_BackFat_error"}),                                   # missing
+        ]
+        m = error_code_faithfulness(pairs)
+        assert m["n"] == 3
+        assert abs(m["exact_match_rate"] - 1 / 3) < 1e-9
+        assert abs(m["extra_rate"] - 1 / 3) < 1e-9
+        assert abs(m["missing_rate"] - 1 / 3) < 1e-9
