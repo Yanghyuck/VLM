@@ -66,7 +66,7 @@ held-out 정상 케이스 점수는 v2/v3와 동등하지만, **검출 실패 �
 | 검출실패 스모크 (성별 환각) | 통과 | — | **통과** (3/3, "암컷" 정확) |
 | visual_desc (BERTScore) | — | — | **0.909** (신규 태스크) |
 
-v8 은 `권고/주의사항` 암기 완화·실 tb_error 비정상 학습·신규 시각서술까지 넓게 개선하면서 사실성(등급·JSON·수치)은 유지·향상. 검출실패 스모크에서 핵심 성별 환각("거세 암컷")이 사라져 **운영 전환 가능**(단 한 케이스의 `비정상_근거`가 없던 error_code 를 끼워넣는 미세 흠 잔존). `3문장_요약` 다양성 천장(v8 0.796 ROUGE·distinct 0.270 < base)은 미돌파. 상세: [`PROGRESS.md`](./PROGRESS.md) Phase 8.
+v8 은 `권고/주의사항` 암기 완화·실 tb_error 비정상 학습·신규 시각서술까지 넓게 개선하면서 사실성(등급·JSON·수치)은 유지·향상. 검출실패 스모크에서 핵심 성별 환각("거세 암컷")이 사라져 **2026-06-04 운영 어댑터를 v4→v8 로 전환**(`config.json` `paths.lora_adapter`). 잔존 흠: 한 케이스의 `비정상_근거`가 없던 error_code 를 끼워넣음, `3문장_요약` 다양성 천장(v8 0.796 ROUGE·distinct 0.270 < base) 미돌파. 상세: [`PROGRESS.md`](./PROGRESS.md) Phase 8.
 
 상세 결과: [`vlm/bench/score_report.md`](./vlm/bench/score_report.md), [`failure_analysis.md`](./vlm/bench/failure_analysis.md), [`quantization_report.md`](./vlm/train/quantization_report.md)
 

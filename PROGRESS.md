@@ -4,7 +4,7 @@
 **현재 브랜치**: `main` (default), `local-vlm-train` (개발 — 모든 신규 커밋·푸시 대상)
 **리포지토리**: https://github.com/Yanghyuck/VLM
 **릴리스**: [`v1.2.0`](https://github.com/Yanghyuck/VLM/tree/v1.2.0) (v4 어댑터 — 검출 실패 환각 근본 해결)
-**운영 권장 어댑터**: `vlm/train/output/qwen3vl-lora-v4` (config.json `paths.lora_adapter`)
+**운영 어댑터**: `vlm/train/output/qwen3vl-lora-v8` (2026-06-04 v4→v8 전환, config.json `paths.lora_adapter`)
 
 ---
 
