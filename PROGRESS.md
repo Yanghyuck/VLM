@@ -1,6 +1,6 @@
 # VLM 프로젝트 진행 현황
 
-**최종 업데이트**: 2026-06-01 (tb_error 실오류 통합 + 시각서술 visual_desc 태스크 신설·전량 증류 진행 중)
+**최종 업데이트**: 2026-06-04 (visual_desc 전량 증류 완료 + v8 학습 완료 + 동일 eval_set 재추론 N-way 평가)
 **현재 브랜치**: `main` (default), `local-vlm-train` (개발 — 모든 신규 커밋·푸시 대상)
 **리포지토리**: https://github.com/Yanghyuck/VLM
 **릴리스**: [`v1.2.0`](https://github.com/Yanghyuck/VLM/tree/v1.2.0) (v4 어댑터 — 검출 실패 환각 근본 해결)
@@ -813,9 +813,57 @@ abnormal 태스크가 합성 데이터(v4 500건)에만 의존했음. 운영자�
 - [x] **파일럿 50장 3회 반복으로 품질 수렴** (v1 greedy → v2 sampling+힌트 → v3 +문체통일)
   - v1: 천편일률·비정상을 정상으로 서술(모순) → v2: 다양성↑·error 반영 → v3: 문체 '~습니다' 통일까지
   - 검증: JSON 파싱 OK, 수치 비낭독, 비정상(HalfBone/RightEntry) 오류 정확 반영
-- [~] **전량 10,852장 증류 진행 중** → `vlm/data/visual_desc_refs.jsonl` (~24~28h, 실측 ~8~9s/건)
-- [ ] (완료 후) build_dataset/convert_dataset 에 visual_desc 태스크 통합 → 학습셋 추가 → 학습
-- [ ] (완료 후) 시각서술 평가 지표(항목 커버리지·DB 정합성·ROUGE/BERT)
+- [x] **전량 10,852장 증류 완료** (2026-06-03) → `vlm/data/visual_desc_refs.jsonl` (OK 10,852 / FAIL 0, 비정상 344 포함, 실측 ~13s/건)
+  - ⚠️ resume 재개 시 직전 죽인 프로세스가 남긴 GPU 상태로 첫 건 CUDA `CUBLAS_STATUS_EXECUTION_FAILED`→`illegal memory access` 발생, 이후 전 건 즉시 FAIL 폭주(2,306건). GPU clean 후 재시작하면 정상. FAIL id는 done으로 박혀 재시도 안 되므로 OK만 남기고 정리 후 재시작 필요.
+- [x] **convert_dataset 에 visual_desc 통합** (`_visual_desc_response` — 라벨 평문 `도체 전체 형태: …\n등지방층 외형: …`, **JSON 아님**) → 학습셋 32,748 샘플
+- [x] **v8 학습 완료** — 아래 Phase 8 참조
+- [x] **시각서술 평가** (`eval_visual_desc.py score`) — field_coverage 100% / number_leak 0% / BERTScore 0.909 / distinct_2 0.074(반복적) / abnormal 1/2
+
+#### Phase 8 — v8 학습 완료 + 동일 eval_set N-way 평가 (2026-06-03 ~ 06-04)
+
+데이터 3배 확대(10,852도체) + tb_error 실오류(344) + visual_desc 태스크를 합쳐 학습.
+
+- [x] **데이터 준비** — `convert_dataset --visual-desc-refs` → `livestock_train.json` **32,748 샘플** (summary 10,802 + grade 10,802 + abnormal 342 + visual_desc 10,802), 평가셋 50건 제외. LLaMA-Factory `livestock_ko` 복사·검증(32,748 일치)
+- [x] **v8 학습** (`qwen3vl_lora_v8.yaml`) — 2026-06-03 10:39 → 06-04 18:07, **28h 50m**
+  - 2766 step / 3 epoch, **train_loss 0.156** (v4 0.160·v6 0.173 대비 낮음), **eval_loss 0.108**(시작 0.170→최저 0.108)
+  - eval_loss < train_loss → 과적합 없음. 어댑터 840MB (rank 64). checkpoint-2400/2600/2766 보존
+  - ⚠️ 1차 실패: LLaMA-Factory `print_data_example`가 학습 예시의 em-dash(`—`)를 Windows cp949 콘솔로 출력하다 `UnicodeEncodeError`(wandb console_capture 경유). **해결: `report_to: none` + `PYTHONUTF8=1`**
+- [x] **동일 eval_set 재추론** — 기존 legacy 결과는 **옛 평가셋**(옛 id·thema_pa 경로)이라 무효. 새 eval_set(thema_pa_VLM, 10.7MP, 정상 48+비정상 2)으로 **base·v4·v6·v8 전부 `--force` 재추론** (registry 에서 base/v4 의 `legacy_results` 제거)
+  - ⚠️ 첫 시도가 샘플당 ~450s(정상 ~20s)로 폭주 → 원인은 **v8 학습 프로세스가 최종 eval·저장 중 GPU ~16GB 점유 → 벤치와 경합**. 학습 완전 종료 후 재실행하니 정상 회복
+  - ⚠️ 이미지 5100×2100(10.7MP) — `generate_report` 가 `image_max_pixels`(100K)로 493×203 다운스케일하므로 캡 자체는 정상(경합이 원인이었음)
+
+##### v8 평가 결과 (동일 eval_set 50건, base/v4/v6/v8 만 유효 비교)
+
+| 지표 | base | v4(운영) | v6 | **v8** |
+|---|---|---|---|---|
+| JSON 파싱 / 등급 일치 | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / 1.000 | **1.000 / 1.000** |
+| 수치 인용 정확도 | 0.967 | 0.973 | 0.960 | **0.987** ⭐최고 |
+| ROUGE-L | 0.933 | 0.985 | 0.972 | 0.932 |
+| BERTScore F1 | 0.911 | 0.994 | 0.990 | 0.968 |
+| Distinct-2(전체) | 0.311 | 0.247 | 0.265 | 0.270 |
+| 추론시간(초) | 18.98 | 20.91 | 19.46 | 20.79 |
+
+**필드별 Distinct-2 (다양성 = 암기 반대 지표):**
+
+| 필드 | base | v4 | v6 | **v8** |
+|---|---|---|---|---|
+| 3문장_요약 | 0.311 | 0.247 | 0.265 | **0.270** |
+| 비정상_근거 | 0.822 | 0.692 | 0.905 | 0.904 |
+| 주의사항 | 0.895 | 0.376 | 0.778 | **0.923** ⭐ |
+| 권고 | 0.168 | 0.177 | 0.150 | **0.291** ⭐ |
+
+**비정상(abnormal) 2건 (실 tb_error):** v8 ROUGE-L **0.804**(최고, v4 0.659/v6 0.628), distinct_2 0.794
+
+**결론 — v8 채택 후보 (검출실패 스모크 검증 후 운영 전환 권장):**
+1. **`3문장_요약` 천장은 미돌파** — v8 0.270 은 v4(0.247)·v6(0.265)보다 낫지만 base(0.311)에는 못 미침. 데이터 3배로도 요약 reference 암기는 완화만 됨(패턴 일관성 가설 재확인)
+2. **`권고`/`주의사항` 다양성 대폭 회복** ⭐ — 권고 0.291(전 모델 최고, v4 대비 +64%), 주의사항 0.923(base 수준). 데이터 확대 + visual_desc 멀티태스크 효과
+3. **사실성 무손상·향상** — 등급 100%, JSON 100%, 수치 인용 0.987(최고)
+4. **비정상 처리 개선** — abnormal ROUGE 0.804 최고 (실 tb_error 344건 학습 효과)
+5. **ROUGE/BERT 가 v4보다 낮은 건 긍정 신호** — reference 통째 암기(v4 0.985)에서 벗어나 base 에 가까운 자연 생성. 바닥(base 0.93) 대비 충분히 높음
+6. **visual_desc**: 라벨 평문 정상 출력, BERTScore 0.909(teacher 충실), 수치 비낭독, 다양성 낮음(이미지 시각 유사)
+
+> **알려진 한계 (채점기)**: `vlm/bench/scorer.compute_rouge_l` 는 `rouge_score` 기본 토크나이저(ASCII만 보존)를 써서 **순수 한글** 텍스트의 ROUGE 가 0이 됨(요약은 "1+","20mm" 등 영문/숫자가 살아남아 동작). visual_desc(순수 한글)는 ROUGE 무의미 → BERTScore 로 대체 판단. 향후 한글 토크나이저 주입 시 v1~v6 과거 ROUGE 수치도 함께 재baseline 필요(별도 과제).
+> **방법론 주의**: 위 표의 base/v4/v6/v8 만 동일(2026-06-04) eval_set 재추론분. score_report.md 의 v1/v2/v3/v5 열은 옛 eval_set legacy 라 비교 불가. baseline(lora_v2_corrected) 도 옛 set 이라 Δ% 는 무시.
 
 ### 우선순위 1 — 5주차 마무리 ✅ (이번 세션 완료)
 - [x] **C1**: `CHANGELOG.md` `[v1.1.0]` 섹션 추가 (5주차 + E2E + warm-up + numpy 핀)

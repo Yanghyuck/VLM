@@ -1,0 +1,30 @@
+{
+  "label": "lora_v4",
+  "model_mode": "lora",
+  "adapter": {
+    "dir": "C:\\Users\\IPC\\Desktop\\git\\VLM\\vlm\\train\\output\\qwen3vl-lora-v4",
+    "exists": true,
+    "adapter_model_sha256": "ba189e5235eba2a4f92daa1f83d710efa4bf0dca3d00d8a55f7c684402379d00",
+    "adapter_config_sha256": "39d2acd05c3db69786f248bc3fe1620c5efa390c06ea163226276ab1722f2485"
+  },
+  "eval_set": {
+    "source": "jsonl",
+    "n": 50,
+    "seed": 42,
+    "path": "C:\\Users\\IPC\\Desktop\\git\\VLM\\vlm\\bench\\eval_set.jsonl",
+    "sha256": "f255843ed50173ffe1fb4b8e1369515736e01c25ccf038fcf349782e644245ec"
+  },
+  "git_sha": "eff1008532969ed3719d841c09fa4a1b4399af8b",
+  "env": {
+    "python": "3.13.13",
+    "platform": "Windows-11-10.0.22631-SP0",
+    "torch": "2.7.1+cu126",
+    "transformers": "5.2.0",
+    "peft": "0.18.1",
+    "numpy": "2.2.6"
+  },
+  "started_utc": "20260604T113154Z",
+  "elapsed_sec": 1045.53,
+  "error": null,
+  "results_path": "C:\\Users\\IPC\\Desktop\\git\\VLM\\vlm\\bench\\runs\\20260604T113154Z__eff1008__lora_v4\\results.jsonl"
+}

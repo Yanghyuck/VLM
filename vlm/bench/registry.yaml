@@ -43,7 +43,7 @@ models:
   - label: base
     mode: base
     adapter_path: null
-    legacy_results: vlm/bench/results_base.jsonl
+    # legacy_results 제거 — 2026-06-04 새 eval_set(thema_pa_VLM, 10.7MP)으로 재추론분 사용
     note: "Qwen3-VL-8B-Instruct 베이스, LoRA 미적용"
 
   - label: lora_v1
@@ -73,7 +73,7 @@ models:
   - label: lora_v4
     mode: lora
     adapter_path: vlm/train/output/qwen3vl-lora-v4
-    legacy_results: vlm/bench/results_lora_v4.jsonl
+    # legacy_results 제거 — 2026-06-04 새 eval_set 재추론분 사용
     note: "v4 — 합성 검출실패 500건 보강, rank 64 유지"
 
   - label: lora_v5
@@ -85,3 +85,8 @@ models:
     mode: lora
     adapter_path: vlm/train/output/qwen3vl-lora-v6
     note: "v6 — 데이터 측 paraphrase 4종 round-robin, rank 64 (v4 hyperparam)"
+
+  - label: lora_v8
+    mode: lora
+    adapter_path: vlm/train/output/qwen3vl-lora-v8
+    note: "v8 — 데이터 3배 확대(10,852도체) + tb_error 실오류 + visual_desc 태스크. 32,748 샘플, rank 64. train_loss 0.156 / eval_loss 0.108"

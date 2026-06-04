@@ -52,6 +52,21 @@ held-out 정상 케이스 점수는 v2/v3와 동등하지만, **검출 실패 �
 **끝단 운영 흐름 검증** (`scripts/run_pa_then_vlm_on_new_images.py`):
 새 ORI 이미지 → `ThematecPA`(YOLO 6 + gender + rightside + inpaint) → AI 결과 이미지 → `SendVLMReport` → VLM v4 → 한국어 리포트 → 저장. 9건 모두 환각 없이 일관된 응답.
 
+### v8 채택 후보 (데이터 3배 + 실 tb_error + visual_desc, 2026-06-04) 🔬
+
+데이터를 10,852도체로 3배 확대(매칭 키 `(pigno_cnt, ymd)` 버그 수정)하고, `tb_error` 실 검출오류(344건)와 신규 **시각 서술(visual_desc)** 태스크를 추가해 32,748 샘플로 학습. 동일 eval_set(50건)으로 base·v4·v6·v8 재추론한 결과:
+
+| 지표 | v4(운영) | v6 | **v8** |
+|---|---|---|---|
+| train/eval_loss | 0.160 / 0.077 | 0.173 / 0.085 | **0.156 / 0.108** |
+| 수치 인용 정확도 | 0.973 | 0.960 | **0.987** ⭐ |
+| Distinct-2 · 권고 | 0.177 | 0.150 | **0.291** ⭐ |
+| Distinct-2 · 주의사항 | 0.376 | 0.778 | **0.923** ⭐ |
+| 비정상 ROUGE-L (2건) | 0.659 | 0.628 | **0.804** ⭐ |
+| visual_desc (BERTScore) | — | — | **0.909** (신규 태스크) |
+
+v8 은 `권고/주의사항` 암기 완화·비정상 처리·신규 시각서술까지 넓게 개선하면서 사실성(등급·JSON·수치)은 유지·향상. 단 `3문장_요약` 다양성 천장(v8 0.270 < base 0.311)은 미돌파. **검출실패 스모크 검증 후 운영 전환 권장**. 상세: [`PROGRESS.md`](./PROGRESS.md) Phase 8.
+
 상세 결과: [`vlm/bench/score_report.md`](./vlm/bench/score_report.md), [`failure_analysis.md`](./vlm/bench/failure_analysis.md), [`quantization_report.md`](./vlm/train/quantization_report.md)
 
 ### 30초 어필 (포트폴리오 요약)
