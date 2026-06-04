@@ -315,6 +315,7 @@ def convert(
     input_path: Path | None = None,
     paraphrase_mode: str = "single",
     visual_desc_refs: dict[str, dict] | None = None,
+    summary_refs: dict[str, list[str]] | None = None,
 ) -> None:
     """dataset.jsonl 을 ShareGPT 학습 JSON 으로 변환.
 
@@ -344,6 +345,7 @@ def convert(
     skipped = 0
     excluded_count = 0
     visual_desc_count = 0
+    summary_distilled = 0      # C — 증류 다양화 요약 사용 건수
     para_counts = {"summary": [0, 0, 0, 0], "abnormal": [0, 0, 0]}
 
     with open(src, encoding="utf-8") as f:
@@ -370,7 +372,13 @@ def convert(
 
             # ── summary task ──────────────────────────────────────────
             if "summary" in tasks:
-                if paraphrase_mode == "round_robin":
+                sref = summary_refs.get(str(row["id"])) if summary_refs else None
+                if sref:
+                    # C — 증류된 다양한 요약(도체당 K변형) 중 id 결정적 선택.
+                    # 템플릿 암기 천장(distinct ~0.27) 돌파용. 없으면 기존 경로로 fallback.
+                    summary_value = sref[id_int % len(sref)]
+                    summary_distilled += 1
+                elif paraphrase_mode == "round_robin":
                     paras = _summary_response_all(meta)
                     idx = id_int % len(paras)
                     summary_value = paras[idx]
@@ -436,6 +444,8 @@ def convert(
         print(f"평가셋 제외: {excluded_count}건 (held-out)")
     if visual_desc_count:
         print(f"visual_desc 샘플: {visual_desc_count}건 (증류 reference 매칭)")
+    if summary_refs is not None:
+        print(f"summary 증류 다양화: {summary_distilled}건 사용 (ref 없는 도체는 기존 경로 fallback)")
     if paraphrase_mode == "round_robin":
         print(f"summary  paraphrase 분포 (id%4): {para_counts['summary']}")
         print(f"abnormal paraphrase 분포 (id%3): {para_counts['abnormal']}")
@@ -453,6 +463,8 @@ if __name__ == "__main__":
                         help="single (v4/v5 호환) | round_robin (v6 — id 결정적 paraphrase 다양화)")
     parser.add_argument("--visual-desc-refs", type=str,
                         help="시각서술 증류 jsonl (distill_visual_desc.py 산출) — visual_desc 태스크 추가")
+    parser.add_argument("--summary-refs", type=str,
+                        help="요약 다양화 증류 jsonl (distill_summary.py 산출) — summary 타깃을 증류 변형으로 대체")
     args = parser.parse_args()
 
     exclude_ids: set[str] = set()
@@ -472,8 +484,19 @@ if __name__ == "__main__":
                     vd_refs[str(rec["id"])] = rec["visual_desc"]
         print(f"visual_desc reference 로드: {len(vd_refs)}건")
 
+    sum_refs: dict[str, list[str]] | None = None
+    if args.summary_refs:
+        sum_refs = {}
+        with open(args.summary_refs, encoding="utf-8") as f:
+            for line in f:
+                rec = json.loads(line)
+                variants = rec.get("summaries") or []
+                if variants:                 # 검증 통과 변형이 있는 것만
+                    sum_refs[str(rec["id"])] = variants
+        print(f"summary 증류 reference 로드: {len(sum_refs)}건")
+
     inp = Path(args.input) if args.input else None
     out = Path(args.output) if args.output else OUTPUT_PATH
     convert(limit=args.limit, output_path=out, exclude_ids=exclude_ids,
             input_path=inp, paraphrase_mode=args.paraphrase_mode,
-            visual_desc_refs=vd_refs)
+            visual_desc_refs=vd_refs, summary_refs=sum_refs)
