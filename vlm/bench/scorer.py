@@ -76,10 +76,27 @@ def numbers_cited(pred: dict | None, meta: dict) -> float:
     return hits / len(targets)
 
 
+class _KoTokenizer:
+    """한글 보존 토크나이저.
+
+    rouge_score 기본 토크나이저는 `[^a-z0-9]+` 로 비ASCII 문자를 모두 제거해,
+    숫자/영문이 없는 **순수 한글** 텍스트의 ROUGE 가 0이 된다(동일 문장끼리도 0).
+    어절(공백) 단위 분할 + 소문자화만 수행해 한글을 보존한다.
+    """
+
+    def tokenize(self, text: str) -> list[str]:
+        return (text or "").lower().split()
+
+
+_KO_TOKENIZER = _KoTokenizer()
+
+
 def compute_rouge_l(pred_text: str, ref_text: str) -> float:
     try:
         from rouge_score import rouge_scorer
-        scorer = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=False)
+        scorer = rouge_scorer.RougeScorer(
+            ["rougeL"], use_stemmer=False, tokenizer=_KO_TOKENIZER,
+        )
         score = scorer.score(ref_text, pred_text)
         return score["rougeL"].fmeasure
     except ImportError:
