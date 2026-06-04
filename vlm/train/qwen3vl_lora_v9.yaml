@@ -1,0 +1,74 @@
+### v9 — 요약(3문장_요약) 다양화 증류 학습
+###
+### v8 → v9 변경:
+### - summary 타깃을 LLM 증류 다양화본으로 대체 (vlm/data/summary_refs.jsonl)
+###   * distill_summary.py 가 base teacher 로 사실 고정·표현 다양화한 도체당 K변형
+###   * 목표: v4~v8 의 `3문장_요약` 다양성 천장(distinct ~0.27) 돌파
+###     (파일럿 distinct_2 ~0.43~0.55, v8 0.270 대비 +60~100%)
+### - visual_desc / tb_error abnormal / grade 는 v8 과 동일
+### - hyperparam: v8 과 100% 동일 (rank 64 / alpha 128 / dropout 0.05, Vision on)
+### - 출력 디렉터리만 v9 로 분리
+###
+### 데이터 준비 (학습 전 — 증류 완료 후):
+###   python vlm/train/convert_dataset.py --exclude-eval-set vlm/bench/eval_set.jsonl \
+###       --paraphrase-mode round_robin \
+###       --visual-desc-refs vlm/data/visual_desc_refs.jsonl \
+###       --summary-refs vlm/data/summary_refs.jsonl
+###   → livestock_train.json (= dataset livestock_ko) 재생성 + LF data 디렉터리 복사
+###
+### 실행: PYTHONUTF8=1 WANDB_DISABLED=true llamafactory-cli train vlm/train/qwen3vl_lora_v9.yaml
+
+### 모델
+model_name_or_path: Qwen/Qwen3-VL-8B-Instruct
+
+### 학습 방법
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target: all
+
+### Vision 학습
+freeze_vision_tower: false
+freeze_multi_modal_projector: false
+
+### 데이터셋 (v9 — summary 증류 다양화 + visual_desc 포함)
+dataset: livestock_ko
+dataset_dir: C:/Users/IPC/Desktop/git/LLaMA-Factory/data
+template: qwen3_vl_nothink
+cutoff_len: 1024
+max_samples: 40000                       # 전량 사용 (truncate 방지)
+overwrite_cache: true
+preprocessing_num_workers: 1
+
+### 출력 (v9 별도 디렉터리)
+output_dir: vlm/train/output/qwen3vl-lora-v9
+logging_steps: 10
+save_steps: 200
+save_total_limit: 3
+plot_loss: true
+overwrite_output_dir: true
+report_to: none                          # wandb 비활성 (console_capture 의 cp949 인코딩 크래시 회피)
+
+### 학습 하이퍼파라미터 (v8 과 동일)
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 32
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000
+dataloader_num_workers: 0
+
+### 검증
+val_size: 0.1
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 200
+
+### 이미지
+image_max_pixels: 100352
+video_max_pixels: 50176
