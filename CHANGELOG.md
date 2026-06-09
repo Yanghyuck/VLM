@@ -7,6 +7,8 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-09
+
 ### Experiment — abnormal 층화 평가셋(A) + 요약 샘플링(B) (2026-06-09)
 - **A — `vlm/bench/eval_set_abnormal.jsonl`** (`dataset.py --n-abnormal 30`): 20 normal + 30 abnormal. 기존 held-out 50건의 abnormal 2건뿐 한계 해소. (abnormal 344건이 학습 포함이라 in-sample — 충실도·스모크엔 적합, ROUGE/distinct 는 주의)
 - **A 결과 — F 후처리 가치 정량화** (`scripts/exp_sampling_abnormal.py`, 30 abnormal): error_code 환각(extra) **F 미적용 13.3%(4/30) → F 적용 0%**. 운영 v8 안전장치 견고 입증(n=2→n=30).
