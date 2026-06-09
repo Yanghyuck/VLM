@@ -7,6 +7,10 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+### Experiment — 요약 temperature 스윕 (2026-06-09)
+- `scripts/exp_temp_sweep.py` (→ `vlm/bench/temp_sweep.json`): 운영 v8 을 메인 eval 50건에 greedy/temp0.5/0.7/0.9 로 추론, 요약 distinct vs 사실보존 매핑.
+- 결과: distinct_2 greedy 0.270 → temp0.9 0.293 (**+8.5% 뿐**), 사실성 전 구간 무손상(등급·성별 50/50, 수치 48/50). **온도는 다양성 유효 레버가 아님** — 천장은 입력 유사성(유사 정상도체)에 묶인 태스크 특성. 요약 다양성 조사 종결(데이터 v9 / 샘플링 / 온도 3경로 모두 무효).
+
 ## [1.3.0] - 2026-06-09
 
 ### Experiment — abnormal 층화 평가셋(A) + 요약 샘플링(B) (2026-06-09)

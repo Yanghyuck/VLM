@@ -1,0 +1,34 @@
+[
+  {
+    "label": "greedy",
+    "distinct_2": 0.2698,
+    "uniq_rate": 1.0,
+    "grade_keep": "50/50",
+    "num_keep": "48/50",
+    "gender_keep": "50/50"
+  },
+  {
+    "label": "temp0.5",
+    "distinct_2": 0.278,
+    "uniq_rate": 1.0,
+    "grade_keep": "50/50",
+    "num_keep": "48/50",
+    "gender_keep": "50/50"
+  },
+  {
+    "label": "temp0.7",
+    "distinct_2": 0.2852,
+    "uniq_rate": 1.0,
+    "grade_keep": "50/50",
+    "num_keep": "48/50",
+    "gender_keep": "50/50"
+  },
+  {
+    "label": "temp0.9",
+    "distinct_2": 0.2931,
+    "uniq_rate": 1.0,
+    "grade_keep": "50/50",
+    "num_keep": "48/50",
+    "gender_keep": "50/50"
+  }
+]
