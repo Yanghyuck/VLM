@@ -896,6 +896,25 @@ v4~v8 내내 미해결인 `3문장_요약` 다양성 천장(distinct ~0.27)을 �
   - 부수 성과: 주의사항 다양성 최고(0.968), error_code 충실도 100%(F 후처리 효과). 단 주력 지표 미개선이라 운영 전환 가치 없음.
   - 산출물 보존: `runs/20260609T000120Z__ac8b427__lora_v9/`, registry `lora_v9` 등록.
 
+#### Phase 10 — abnormal 층화 평가셋(A) + 요약 샘플링(B) 실험 (2026-06-09)
+
+v9 음성결과 후속 — 충실도 견고 측정 + 출력 다양성 레버 규명.
+
+- [x] **A — abnormal 층화 평가셋** (`vlm/bench/eval_set_abnormal.jsonl`, `dataset.py --n-abnormal 30`)
+  - 20 normal + **30 abnormal** (등급 2:19/1+:21/1:10). 기존 held-out 50건의 abnormal 2건뿐 한계 해소.
+  - ⚠️ abnormal 344건이 학습 포함이라 **in-sample**(충실도·스모크엔 적합, ROUGE/distinct 는 암기 inflated 주의).
+- [x] **A 결과 — F 후처리의 가치 정량화** (`scripts/exp_sampling_abnormal.py`, 30 abnormal):
+
+  | | exact | **extra(환각)** | missing |
+  |---|---|---|---|
+  | F 미적용(raw v8) | 83.3% | **13.3%** (4/30) | 6.7% |
+  | **F 적용** | 96.7% | **0%** | 3.3% |
+
+  → **F 가 error_code 환각을 13.3%→0% 완전 제거** (운영 v8 에 적용 중인 안전장치 검증, n=30 으로 견고). missing 3.3%는 F 의 보수적 설계(환각만 교정).
+- [x] **B 결과 — 요약 distinct greedy vs temp 0.3** (메인 eval 50):
+  - greedy 0.2698 / **temp 0.3 0.2792 (+3.5%, 무의미)**. 사실성 둘 다 등급 50/50·수치 48/50(훼손 없음).
+  - → 경량 샘플링도 천장 미돌파. **요약 distinct 천장(~0.27)은 평가셋(유사 정상도체 50건) 특성** — 유사 입력의 충실한 요약은 유사함이 정상. 데이터 다양화(v9)·샘플링(temp0.3) 모두 무효. 깨려면 다양한 입력 or 공격적 샘플링(사실 훼손). **요약 다양성은 결함이 아닌 태스크 특성으로 수용.**
+
 ### 우선순위 1 — 5주차 마무리 ✅ (이번 세션 완료)
 - [x] **C1**: `CHANGELOG.md` `[v1.1.0]` 섹션 추가 (5주차 + E2E + warm-up + numpy 핀)
 - [x] **D1**: `git push origin local-vlm-train` (메모리 규칙: main 직접 푸시 금지)
