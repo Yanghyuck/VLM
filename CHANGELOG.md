@@ -7,6 +7,36 @@ VLM Korean Livestock Copilot 프로젝트 변경 이력.
 
 ## [Unreleased]
 
+### Experiment — abnormal 층화 평가셋(A) + 요약 샘플링(B) (2026-06-09)
+- **A — `vlm/bench/eval_set_abnormal.jsonl`** (`dataset.py --n-abnormal 30`): 20 normal + 30 abnormal. 기존 held-out 50건의 abnormal 2건뿐 한계 해소. (abnormal 344건이 학습 포함이라 in-sample — 충실도·스모크엔 적합, ROUGE/distinct 는 주의)
+- **A 결과 — F 후처리 가치 정량화** (`scripts/exp_sampling_abnormal.py`, 30 abnormal): error_code 환각(extra) **F 미적용 13.3%(4/30) → F 적용 0%**. 운영 v8 안전장치 견고 입증(n=2→n=30).
+- **B 결과 — 요약 distinct greedy vs temp 0.3**: 0.2698 → 0.2792 (+3.5%, 무의미), 사실성 훼손 0(등급 50/50·수치 48/50). → 천장은 평가셋(유사 정상도체) 특성. **요약 다양성은 결함 아닌 태스크 특성으로 수용.**
+
+### Trained — v9 요약 다양화 증류 학습 (2026-06-07 ~ 06-09) — 음성 결과, 비채택
+- **`scripts/distill_summary.py`** — base teacher 가 사실(등급·성별·측정3종) 고정·표현만 다양화한 요약을 도체당 K=3 생성. **10,852도체 / 32,556변형 / 통과율 99.9%**. 안전장치: 사실 보존 검증 + 가치판단 금지 프롬프트(누출 44%→0%) + 영문 글리치 필터. K=3 배치 생성(~1.7x). 동일 50표본 distinct **0.448**(템플릿 round_robin 0.267 대비 +68%).
+- **`convert_dataset.py --summary-refs`** + **`qwen3vl_lora_v9.yaml`** — summary 타깃 100% 증류본(32,748 샘플), v8 동일 hyperparam.
+- 5-way 평가(base/v4/v6/v8/v9 동일 eval_set): 3문장_요약 distinct **0.270→0.223 (천장 미돌파, 오히려 하락)**, ROUGE/BERT 하락(암기↓), 주의사항 distinct 0.968(최고), error_code 충실도 100%(F).
+- **핵심 교훈**: 학습데이터 다양성은 **greedy 추론 다양성으로 전이되지 않음** — distinct 천장은 decoding(greedy)+입력유사성에 묶임. 출력다양성은 추론 샘플링이 유일 레버(사실안전성 trade-off). → **v9 비채택, 운영 v8 유지.**
+- **운영 교훈**: 학습 중 VRAM 99.9% 만차 → 메모리 단편화로 step~1400부터 37→216s/it 폭락. **`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` + checkpoint resume 로 35s/it 복구**(yaml 주석 명시).
+
+### Added — error_code 충실도: 후처리(F) + 메트릭(B) (2026-06-04)
+- **F — `vlm/postprocess.py enforce_error_code_grounding`**: `비정상_근거`가 입력 error_code 에 없는 검출오류를 끼워넣는 환각을 차단. extra 코드 탐지 시 입력 기준으로 근거 재작성(A4 등급 강제와 동일 철학), missing 은 메타 기록. `generate_report` 가 `output.error_code` 전달해 운영 자동 적용.
+- **B — `vlm/bench/scorer.error_code_faithfulness` + `scripts/eval_error_code_faithfulness.py`**: abnormal 케이스의 extra/missing/exact 비율 측정.
+- 테스트 +12 (`tests/test_postprocess.py` 전체 45 PASS).
+
+### Fixed — compute_rouge_l 한글 토크나이저 (2026-06-04)
+- `vlm/bench/scorer.compute_rouge_l` 가 `rouge_score` 기본 토크나이저(`[^a-z0-9]+` 로 비ASCII 제거)를 써서 **순수 한글 텍스트의 ROUGE 가 0**(동일 문장끼리도 0; 요약은 "1+","20mm" 등이 살아남아 부분 동작)이던 버그. 어절(공백) 분할 `_KoTokenizer` 주입으로 수정 → score_report.md ROUGE 전부 한글 어절 기준 재계산.
+
+### Changed — 운영 어댑터 v4 → v8 전환 (2026-06-04)
+- `config.json` / `config.example.json` `paths.lora_adapter` → `qwen3vl-lora-v8`. 검출실패 스모크 통과(성별 환각 해소) 근거. 검증: config 기본값으로 v8 로드 + 정상 4필드 응답.
+- N-way 평가 방법론 수정: 기존 legacy 결과가 옛 eval_set(옛 id·thema_pa 경로)이라 무효 → base·v4·v6·v8 을 새 eval_set(thema_pa_VLM)으로 `--force` 전량 재추론. registry 에서 base/v4 의 `legacy_results` 제거.
+
+### Trained — v8 학습 완료 (2026-06-03 ~ 06-04)
+- **데이터 3배 확대** — 매칭 키 버그(`pigno_cnt` 단독 → `(pigno_cnt, ymd)`) 수정으로 dataset 3,816 → **10,852건**. `tb_error` 실 검출오류(344건) LEFT JOIN 통합(하드코딩 제거). **시각 서술(visual_desc)** 태스크 신설 — base Qwen3-VL 증류(`scripts/distill_visual_desc.py`, 10,852장, 수치 비낭독·문체 통일).
+- v8 학습 28h 50m, 2766 step / 3 epoch: **train_loss 0.156 / eval_loss 0.108**(과적합 없음). 학습셋 32,748 샘플(summary 10,802 + grade 10,802 + abnormal 342 + visual_desc 10,802).
+- 5-way 평가: 권고 distinct 0.291·주의사항 0.923(다양성 회복), 수치인용 0.987(최고), 검출실패 스모크 통과(성별 환각 해소). 요약 distinct 천장(0.270) 미돌파.
+- **운영 교훈**: LLaMA-Factory `print_data_example` 의 em-dash cp949 콘솔 출력 크래시 → `report_to: none` + `PYTHONUTF8=1` 로 회피.
+
 ### Added — 진단/CI 강화 (2026-05-28)
 - `vlm/bench/scorer.py` — 필드별/케이스별 평가 분리
   - prediction 4필드 각각 `distinct_2__{필드}` 측정 → "권고" 필드가 v3/v4 에서 baseline 대비 **-69.7%** (가장 심한 암기 패턴) 진단
