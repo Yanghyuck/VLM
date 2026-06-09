@@ -90,3 +90,8 @@ models:
     mode: lora
     adapter_path: vlm/train/output/qwen3vl-lora-v8
     note: "v8 — 데이터 3배 확대(10,852도체) + tb_error 실오류 + visual_desc 태스크. 32,748 샘플, rank 64. train_loss 0.156 / eval_loss 0.108"
+
+  - label: lora_v9
+    mode: lora
+    adapter_path: vlm/train/output/qwen3vl-lora-v9
+    note: "v9 — summary 타깃을 LLM 증류 다양화본으로 대체(천장 돌파 시도). 동일50표본 distinct 0.448(템플릿 0.267). hyperparam v8 동일"

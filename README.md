@@ -68,6 +68,8 @@ held-out 정상 케이스 점수는 v2/v3와 동등하지만, **검출 실패 �
 
 v8 은 `권고/주의사항` 암기 완화·실 tb_error 비정상 학습·신규 시각서술까지 넓게 개선하면서 사실성(등급·JSON·수치)은 유지·향상. 검출실패 스모크에서 핵심 성별 환각("거세 암컷")이 사라져 **2026-06-04 운영 어댑터를 v4→v8 로 전환**(`config.json` `paths.lora_adapter`). 잔존 흠: 한 케이스의 `비정상_근거`가 없던 error_code 를 끼워넣음, `3문장_요약` 다양성 천장(v8 0.796 ROUGE·distinct 0.270 < base) 미돌파. 상세: [`PROGRESS.md`](./PROGRESS.md) Phase 8.
 
+> **v9 음성 결과 (2026-06-09)**: 요약 reference 를 LLM 증류로 다양화(학습데이터 distinct 0.448)해 천장을 깨려 했으나, **greedy 추론 다양성은 전이되지 않아 오히려 하락(0.270→0.223)**. distinct 천장은 데이터가 아니라 greedy 디코딩 + 입력 유사성에 묶인 것으로 확인. **v9 비채택, 운영 v8 유지**. 부산물: `error_code 충실도 후처리(F)`·`충실도 메트릭(B)`·`요약 증류 파이프라인` 확보. 상세: [`PROGRESS.md`](./PROGRESS.md) Phase 9.
+
 상세 결과: [`vlm/bench/score_report.md`](./vlm/bench/score_report.md), [`failure_analysis.md`](./vlm/bench/failure_analysis.md), [`quantization_report.md`](./vlm/train/quantization_report.md)
 
 ### 30초 어필 (포트폴리오 요약)

@@ -118,6 +118,9 @@ def _is_faithful(text: str, f: dict) -> bool:
 def load_model():
     print(f"[distill-summary] base 모델 로딩: {BASE_MODEL}")
     proc = AutoProcessor.from_pretrained(BASE_MODEL, trust_remote_code=True)
+    # 배치 생성 시 디코더는 left-padding 이어야 출력이 어긋나지 않음.
+    if getattr(proc, "tokenizer", None) is not None:
+        proc.tokenizer.padding_side = "left"
     model = Qwen3VLForConditionalGeneration.from_pretrained(
         BASE_MODEL, torch_dtype=torch.bfloat16, device_map="auto", trust_remote_code=True,
     )
@@ -125,17 +128,23 @@ def load_model():
     return model, proc
 
 
-def generate(model, proc, prompt: str, temperature: float, top_p: float) -> str:
-    messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
-    text = proc.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = proc(text=[text], return_tensors="pt").to(model.device)
+def generate_batch(model, proc, prompts: list[str], temperature: float, top_p: float) -> list[str]:
+    """C1 — K개 프롬프트를 한 번의 forward 로 배치 생성(~3x 가속, 메모리대역 amortize)."""
+    texts = [
+        proc.apply_chat_template(
+            [{"role": "user", "content": [{"type": "text", "text": p}]}],
+            tokenize=False, add_generation_prompt=True,
+        )
+        for p in prompts
+    ]
+    inputs = proc(text=texts, return_tensors="pt", padding=True).to(model.device)
     with torch.no_grad():
         out = model.generate(
             **inputs, max_new_tokens=300, do_sample=True,
             temperature=temperature, top_p=top_p, repetition_penalty=1.05,
         )
     gen = out[:, inputs["input_ids"].shape[1]:]
-    return proc.batch_decode(gen, skip_special_tokens=True)[0].strip()
+    return [s.strip() for s in proc.batch_decode(gen, skip_special_tokens=True)]
 
 
 def _is_abnormal(meta: dict) -> bool:
@@ -190,16 +199,20 @@ def main():
         for i, r in enumerate(todo, 1):
             f = _facts(r["metadata"])
             variants: list[str] = []
-            tries = 0
-            while len(variants) < args.k and tries < args.max_tries:
-                style = STYLE_HINTS[(len(variants) + tries) % len(STYLE_HINTS)]
-                raw = generate(model, proc, _build_prompt(f, style), args.temperature, args.top_p)
-                # 3문장 정리 — 줄바꿈 제거, 공백 정규화
-                cand = re.sub(r"\s+", " ", raw).strip()
-                tries += 1
-                total_try += 1
-                if cand and _is_faithful(cand, f) and cand not in variants:
-                    variants.append(cand)
+            rounds = 0
+            while len(variants) < args.k and rounds < args.max_tries:
+                need = args.k - len(variants)
+                prompts = [
+                    _build_prompt(f, STYLE_HINTS[(len(variants) + j + rounds * args.k) % len(STYLE_HINTS)])
+                    for j in range(need)
+                ]
+                raws = generate_batch(model, proc, prompts, args.temperature, args.top_p)
+                rounds += 1
+                total_try += len(raws)
+                for raw in raws:
+                    cand = re.sub(r"\s+", " ", raw).strip()       # 줄바꿈 제거·공백 정규화
+                    if cand and _is_faithful(cand, f) and cand not in variants:
+                        variants.append(cand)
             total_valid += len(variants)
             rec = {
                 "id": r["id"],
@@ -210,7 +223,7 @@ def main():
             }
             fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
             fout.flush()
-            print(f"  [{i}/{len(todo)}] id={r['id']} 통과 {len(variants)}/{args.k} (시도 {tries})")
+            print(f"  [{i}/{len(todo)}] id={r['id']} 통과 {len(variants)}/{args.k} (배치 {rounds}회)")
 
     rate = (total_valid / total_try * 100) if total_try else 0
     print(f"\n[distill-summary] 완료: 변형 {total_valid}개 / 시도 {total_try} "
